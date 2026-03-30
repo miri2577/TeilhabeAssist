@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/storage/settings_storage.dart';
 import '../api/providers/api_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -12,6 +13,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late final TextEditingController _anthropicKeyController;
   late final TextEditingController _openaiKeyController;
+  final _settingsStorage = SettingsStorage();
   bool _obscureKey = true;
   bool _validating = false;
   bool? _keyValid;
@@ -25,6 +27,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _openaiKeyController = TextEditingController(
       text: ref.read(openaiApiKeyProvider),
     );
+    _initStorage();
+  }
+
+  Future<void> _initStorage() async {
+    await _settingsStorage.init();
   }
 
   @override
@@ -57,8 +64,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (valid) {
           if (provider == LLMProvider.anthropic) {
             ref.read(apiKeyProvider.notifier).state = key;
+            _settingsStorage.anthropicApiKey = key;
           } else {
             ref.read(openaiApiKeyProvider.notifier).state = key;
+            _settingsStorage.openaiApiKey = key;
           }
         }
       }
@@ -108,10 +117,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 ref
                                     .read(selectedProviderProvider.notifier)
                                     .state = provider;
+                                _settingsStorage.selectedProvider = provider.name;
                                 // Modell auf Default des neuen Providers setzen
+                                final newModel = ref.read(llmAdapterProvider).defaultModel;
                                 ref
                                     .read(selectedModelProvider.notifier)
-                                    .state = ref.read(llmAdapterProvider).defaultModel;
+                                    .state = newModel;
+                                _settingsStorage.selectedModel = newModel;
                                 setState(() => _keyValid = null);
                               }
                             },

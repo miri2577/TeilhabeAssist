@@ -10,6 +10,8 @@ import '../pseudonymization/providers/pseudonym_providers.dart';
 import '../pseudonymization/ui/widgets/highlighted_text.dart';
 import 'models/report_draft.dart';
 import 'providers/report_providers.dart';
+import 'services/quality_checker.dart';
+import 'widgets/quality_panel.dart';
 
 enum GenerateStep { pseudonymize, review, generate, result }
 
@@ -29,6 +31,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   bool _isStreaming = false;
   String? _error;
   List<BrpPage4Warning> _page4Warnings = [];
+  List<QualityIssue> _qualityIssues = [];
 
   @override
   void initState() {
@@ -67,8 +70,8 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       return;
     }
 
-    final draft = ref.read(reportDraftNotifierProvider);
-    if (draft == null || _pseudonymResult == null) return;
+    final currentDraft = ref.read(reportDraftNotifierProvider);
+    if (currentDraft == null || _pseudonymResult == null) return;
 
     setState(() {
       _step = GenerateStep.generate;
@@ -84,7 +87,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       final request = ReportRequest(
         apiKey: apiKey,
         model: model,
-        reportType: draft.type,
+        reportType: currentDraft.type,
         pseudonymizedNotes: _pseudonymResult!.cleanText,
         pseudonymizedPreviousReport: _previousReportResult?.cleanText,
       );
@@ -111,6 +114,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       }
 
       ref.read(reportDraftNotifierProvider.notifier).setGeneratedText(finalText);
+
+      // Qualitätsprüfung des generierten Texts
+      final draft = ref.read(reportDraftNotifierProvider);
+      _qualityIssues = QualityChecker.checkGeneratedText(
+        finalText,
+        draft?.type ?? ReportType.informationsbericht,
+      );
 
       setState(() {
         _generatedText = finalText;
@@ -420,6 +430,10 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (_qualityIssues.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          QualityPanel(issues: _qualityIssues),
+        ],
         const SizedBox(height: 16),
         Expanded(
           child: Container(

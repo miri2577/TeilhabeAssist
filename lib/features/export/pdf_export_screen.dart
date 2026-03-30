@@ -7,13 +7,37 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../report_editor/providers/report_providers.dart';
+import 'feedback_dialog.dart';
 
-class PdfExportScreen extends ConsumerWidget {
+class PdfExportScreen extends ConsumerStatefulWidget {
   const PdfExportScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PdfExportScreen> createState() => _PdfExportScreenState();
+}
+
+class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
+  bool _feedbackShown = false;
+
+  void _showFeedback() {
+    if (_feedbackShown) return;
+    _feedbackShown = true;
+    // Zeige Feedback-Dialog nach kurzem Delay
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => const FeedbackDialog(),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
     final draft = ref.watch(reportDraftNotifierProvider);
+    _showFeedback();
 
     if (draft == null || draft.generatedText == null) {
       return Scaffold(

@@ -4,8 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'models/report_draft.dart';
 import 'models/report_module.dart';
 import 'providers/report_providers.dart';
+import 'services/pdf_import_service.dart';
+import 'services/quality_checker.dart';
+import 'services/template_storage.dart';
 import 'widgets/module_card.dart';
 import 'widgets/module_palette.dart';
+import 'widgets/quality_panel.dart';
+import 'widgets/template_dialog.dart';
 
 class ReportEditorScreen extends ConsumerStatefulWidget {
   const ReportEditorScreen({super.key});
@@ -18,11 +23,97 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   String? _expandedModuleId;
   bool _showPreviousReport = false;
   final _previousReportController = TextEditingController();
+  final _templateStorage = TemplateStorage();
+  List<QualityIssue>? _qualityIssues;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTemplateStorage();
+  }
+
+  Future<void> _initTemplateStorage() async {
+    await _templateStorage.init();
+  }
 
   @override
   void dispose() {
     _previousReportController.dispose();
     super.dispose();
+  }
+
+  void _runQualityCheck(ReportDraft draft) {
+    setState(() {
+      _qualityIssues = QualityChecker.checkDraft(draft);
+    });
+  }
+
+  Future<void> _importPdf() async {
+    final result = await PdfImportService.pickAndExtract();
+    if (result == null || !mounted) return;
+
+    _previousReportController.text = result.text;
+    ref
+        .read(reportDraftNotifierProvider.notifier)
+        .updatePreviousReport(result.text);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${result.fileName} importiert (${result.pageCount} Seiten)',
+        ),
+      ),
+    );
+  }
+
+  void _saveAsTemplate(ReportDraft draft) {
+    showDialog(
+      context: context,
+      builder: (ctx) => SaveTemplateDialog(
+        draft: draft,
+        onSave: (template) async {
+          await _templateStorage.save(template);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Vorlage "${template.name}" gespeichert')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _loadTemplate() {
+    final templates = _templateStorage.getAll();
+    showDialog(
+      context: context,
+      builder: (ctx) => LoadTemplateDialog(
+        templates: templates,
+        onSelect: (template) {
+          ref.read(reportDraftNotifierProvider.notifier).createNew(template.reportType);
+          // Module aus Template übernehmen
+          for (final tm in template.modules) {
+            ref.read(reportDraftNotifierProvider.notifier).updateModuleNotes(
+              // Finde das passende Modul im Draft
+              ref.read(reportDraftNotifierProvider)?.modules
+                  .where((m) => m.type == tm.type)
+                  .firstOrNull?.id ?? '',
+              tm.defaultNotes,
+            );
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Vorlage "${template.name}" geladen')),
+          );
+        },
+        onDelete: (id) async {
+          await _templateStorage.delete(id);
+          if (!mounted) return;
+          Navigator.of(context).pop();
+          _loadTemplate();
+        },
+      ),
+    );
   }
 
   @override
@@ -43,14 +134,28 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
       appBar: AppBar(
         title: Text(draft.type.label),
         actions: [
-          TextButton.icon(
+          // Qualitätsprüfung
+          IconButton(
+            icon: const Icon(Icons.fact_check_outlined),
+            tooltip: 'Qualitätsprüfung',
+            onPressed: () => _runQualityCheck(draft),
+          ),
+          // Template speichern
+          IconButton(
+            icon: const Icon(Icons.save_outlined),
+            tooltip: 'Als Vorlage speichern',
+            onPressed: () => _saveAsTemplate(draft),
+          ),
+          const SizedBox(width: 8),
+          // Generieren
+          FilledButton.icon(
             onPressed: _canGenerate(draft)
                 ? () => context.go('/generate')
                 : null,
             icon: const Icon(Icons.auto_awesome),
-            label: const Text('Bericht generieren'),
+            label: const Text('Generieren'),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
       ),
       body: Row(
@@ -59,6 +164,13 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
           Expanded(
             child: Column(
               children: [
+                // Qualitäts-Panel
+                if (_qualityIssues != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: QualityPanel(issues: _qualityIssues!),
+                  ),
+
                 // Alter Bericht Toggle
                 _buildPreviousReportSection(draft, theme),
                 const Divider(height: 1),
@@ -159,6 +271,12 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
             ),
             const SizedBox(height: 8),
           ],
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            onPressed: _loadTemplate,
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Aus Vorlage erstellen'),
+          ),
         ],
       ),
     );
@@ -176,21 +294,43 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: TextField(
-            controller: _previousReportController,
-            maxLines: 8,
-            decoration: const InputDecoration(
-              hintText:
-                  'Vorherigen Bericht hier einfügen (Copy & Paste)...\n\n'
-                  'Dieser wird pseudonymisiert und der KI als Kontext '
-                  'für die Fortschreibung mitgegeben.',
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (text) {
-              ref
-                  .read(reportDraftNotifierProvider.notifier)
-                  .updatePreviousReport(text);
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: _importPdf,
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text('PDF importieren'),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'oder Text manuell einfügen:',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _previousReportController,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  hintText:
+                      'Vorherigen Bericht hier einfügen (Copy & Paste)...\n\n'
+                      'Dieser wird pseudonymisiert und der KI als Kontext '
+                      'für die Fortschreibung mitgegeben.',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (text) {
+                  ref
+                      .read(reportDraftNotifierProvider.notifier)
+                      .updatePreviousReport(text);
+                },
+              ),
+            ],
           ),
         ),
       ],
