@@ -1,0 +1,50 @@
+name: teilhabe_assist
+description: "KI-gestützte Berichterstellung für Eingliederungshilfe Berlin"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Routing
+  go_router: ^14.8.1
+
+  # Lokale Speicherung (verschlüsselt)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Kryptographie
+  pointycastle: ^3.9.1
+  encrypt: ^5.0.3
+
+  # HTTP Client
+  dio: ^5.7.0
+
+  # PDF
+  pdf: ^3.11.2
+  printing: ^5.13.4
+  syncfusion_flutter_pdf: ^28.1.33
+
+  # File Picker
+  file_picker: ^8.1.7
+
+  # Utilities
+  uuid: ^4.5.1
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
