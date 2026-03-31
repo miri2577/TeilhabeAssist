@@ -6,6 +6,7 @@ import '../models/pseudonym_result.dart';
 import 'address_recognizer.dart';
 import 'name_recognizer.dart';
 import 'regex_patterns.dart';
+import 'user_dictionary.dart';
 
 class PseudonymEngine {
   final List<PseudonymMapping> _mappings = [];
@@ -19,6 +20,13 @@ class PseudonymEngine {
 
   PseudonymEngine() {
     _commonWordsLower = kCommonWords.map((w) => w.toLowerCase()).toSet();
+  }
+
+  /// Lädt Benutzer-Wörterbuch in die Engine
+  void loadUserDictionary(UserDictionary dictionary) {
+    if (!dictionary.isInitialized) return;
+    _nameRecognizer.setExcludedWords(dictionary.excludedWords);
+    _nameRecognizer.setLearnedNames(dictionary.learnedNames);
   }
 
   String _nextPlaceholder(PseudonymCategory cat) {

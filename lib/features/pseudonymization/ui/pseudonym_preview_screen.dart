@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../models/pseudonym_mapping.dart';
 import '../models/pseudonym_result.dart';
 import '../providers/pseudonym_providers.dart';
-import 'widgets/confirmation_dialog.dart';
 import 'widgets/highlighted_text.dart';
 
 class PseudonymPreviewScreen extends ConsumerStatefulWidget {
@@ -27,6 +27,8 @@ class _PseudonymPreviewScreenState
 
   void _runPseudonymization() {
     final engine = ref.read(pseudonymEngineProvider);
+    final dictionary = ref.read(userDictionaryProvider);
+    engine.loadUserDictionary(dictionary);
     final result = engine.pseudonymize(_textController.text);
     ref.read(pseudonymResultProvider.notifier).state = result;
     setState(() => _confirmed = false);
@@ -39,6 +41,10 @@ class _PseudonymPreviewScreenState
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => GoRouter.of(context).go('/'),
+        ),
         title: const Text('Pseudonymisierung'),
         actions: [
           if (result != null)
@@ -87,6 +93,7 @@ class _PseudonymPreviewScreenState
                                 'Text hier einfügen oder eingeben...',
                             alignLabelWithHint: true,
                           ),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -215,37 +222,48 @@ class _PseudonymPreviewScreenState
   }
 
   Widget _buildWarnings(PseudonymResult result, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.08),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Bitte prüfen:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange.shade700,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 150),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.08),
+          border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Bitte prüfen (${result.warningCount}):',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade700,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           const SizedBox(height: 8),
-          ...result.warnings.map(
-            (w) => Padding(
-              padding: const EdgeInsets.only(left: 28, bottom: 4),
-              child: Text('• $w', style: theme.textTheme.bodySmall),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: result.warnings.map(
+                  (w) => Padding(
+                    padding: const EdgeInsets.only(left: 28, bottom: 4),
+                    child: Text('• $w', style: theme.textTheme.bodySmall),
+                  ),
+                ).toList(),
+              ),
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -282,33 +300,95 @@ class _PseudonymPreviewScreenState
   }
 
   void _showMappingDetail(PseudonymMapping mapping) {
+    final dictionary = ref.read(userDictionaryProvider);
+
     showDialog(
       context: context,
-      builder: (ctx) => MappingDetailDialog(
-        mapping: mapping,
-        onConfirm: () {
-          // Bestätigung – Mapping bleibt
-        },
-        onReject: () {
-          // Verwerfen – Mapping entfernen und Text rekonstruieren
-          final result = ref.read(pseudonymResultProvider);
-          if (result != null) {
-            final newCleanText = result.cleanText.replaceAll(
-              mapping.placeholder,
-              mapping.original,
-            );
-            final newMappings = result.mappings
-                .where((m) => m.placeholder != mapping.placeholder)
-                .toList();
-            ref.read(pseudonymResultProvider.notifier).state = PseudonymResult(
-              cleanText: newCleanText,
-              mappings: newMappings,
-              warnings: result.warnings,
-            );
-          }
-        },
+      builder: (ctx) => AlertDialog(
+        title: Text('Erkannt: "${mapping.original}"'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Kategorie: ${mapping.category.prefix}'),
+            const SizedBox(height: 4),
+            Text('Ersetzt durch: ${mapping.placeholder}'),
+            const SizedBox(height: 4),
+            Text(
+              'Konfidenz: ${mapping.confidence.name}',
+              style: TextStyle(
+                color: switch (mapping.confidence) {
+                  ConfidenceLevel.high => Colors.green,
+                  ConfidenceLevel.medium => Colors.orange,
+                  ConfidenceLevel.low => Colors.red,
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Kein Name → ins Wörterbuch, nicht mehr flaggen
+          TextButton.icon(
+            onPressed: () async {
+              await dictionary.excludeWord(mapping.original);
+              _rejectMapping(mapping);
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('"${mapping.original}" ins Wörterbuch aufgenommen – wird nicht mehr erkannt'),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.block, size: 18),
+            label: const Text('Kein Name (merken)'),
+          ),
+          // Nur diesmal entfernen
+          TextButton(
+            onPressed: () {
+              _rejectMapping(mapping);
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('Nur diesmal entfernen'),
+          ),
+          // Ist ein Name → lernen
+          FilledButton.icon(
+            onPressed: () async {
+              await dictionary.learnName(mapping.original);
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('"${mapping.original}" als Name gelernt – wird zukünftig erkannt'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Ist ein Name (merken)'),
+          ),
+        ],
       ),
     );
+  }
+
+  void _rejectMapping(PseudonymMapping mapping) {
+    final result = ref.read(pseudonymResultProvider);
+    if (result != null) {
+      final newCleanText = result.cleanText.replaceAll(
+        mapping.placeholder,
+        mapping.original,
+      );
+      final newMappings = result.mappings
+          .where((m) => m.placeholder != mapping.placeholder)
+          .toList();
+      ref.read(pseudonymResultProvider.notifier).state = PseudonymResult(
+        cleanText: newCleanText,
+        mappings: newMappings,
+        warnings: result.warnings,
+      );
+    }
   }
 
   void _onRelease() {

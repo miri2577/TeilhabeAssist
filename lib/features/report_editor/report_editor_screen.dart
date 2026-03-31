@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +15,9 @@ import 'widgets/module_palette.dart';
 import 'widgets/quality_panel.dart';
 import 'widgets/template_dialog.dart';
 
+/// Einstiegs-Auswahl
+enum EditorMode { initial, erstbericht, folgebericht }
+
 class ReportEditorScreen extends ConsumerStatefulWidget {
   const ReportEditorScreen({super.key});
 
@@ -20,57 +26,85 @@ class ReportEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
+  EditorMode _mode = EditorMode.initial;
   String? _expandedModuleId;
-  bool _showPreviousReport = false;
+  bool _isDragging = false;
   final _previousReportController = TextEditingController();
+  final _notesController = TextEditingController();
   final _templateStorage = TemplateStorage();
   List<QualityIssue>? _qualityIssues;
 
   @override
   void initState() {
     super.initState();
-    _initTemplateStorage();
-  }
-
-  Future<void> _initTemplateStorage() async {
-    await _templateStorage.init();
+    _templateStorage.init();
   }
 
   @override
   void dispose() {
     _previousReportController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
-  void _runQualityCheck(ReportDraft draft) {
-    setState(() {
-      _qualityIssues = QualityChecker.checkDraft(draft);
-    });
+  // --- File Drop / Import ---
+
+  Future<void> _handleFileDrop(DropDoneDetails details) async {
+    for (final xFile in details.files) {
+      final path = xFile.path;
+      final ext = path.split('.').last.toLowerCase();
+      String extractedText;
+      String fileName = xFile.name;
+
+      if (ext == 'pdf') {
+        final bytes = await File(path).readAsBytes();
+        final result = PdfImportService.extractText(bytes, fileName);
+        extractedText = result.text;
+        fileName = '${result.fileName} (${result.pageCount} Seiten)';
+      } else if (ext == 'txt' || ext == 'md') {
+        extractedText = await File(path).readAsString();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('.$ext nicht unterstützt – bitte PDF oder TXT.')),
+          );
+        }
+        continue;
+      }
+
+      if (extractedText.isNotEmpty) {
+        _previousReportController.text = extractedText;
+        ref
+            .read(reportDraftNotifierProvider.notifier)
+            .updatePreviousReport(extractedText);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$fileName importiert')),
+        );
+      }
+      break;
+    }
   }
 
   Future<void> _importPdf() async {
     final result = await PdfImportService.pickAndExtract();
     if (result == null || !mounted) return;
-
     _previousReportController.text = result.text;
     ref
         .read(reportDraftNotifierProvider.notifier)
         .updatePreviousReport(result.text);
-
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${result.fileName} importiert (${result.pageCount} Seiten)',
-        ),
-      ),
+      SnackBar(content: Text('${result.fileName} importiert (${result.pageCount} Seiten)')),
     );
   }
+
+  // --- Template ---
 
   void _saveAsTemplate(ReportDraft draft) {
     showDialog(
       context: context,
-      builder: (ctx) => SaveTemplateDialog(
+      builder: (_) => SaveTemplateDialog(
         draft: draft,
         onSave: (template) async {
           await _templateStorage.save(template);
@@ -85,26 +119,25 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   }
 
   void _loadTemplate() {
-    final templates = _templateStorage.getAll();
     showDialog(
       context: context,
-      builder: (ctx) => LoadTemplateDialog(
-        templates: templates,
+      builder: (_) => LoadTemplateDialog(
+        templates: _templateStorage.getAll(),
         onSelect: (template) {
           ref.read(reportDraftNotifierProvider.notifier).createNew(template.reportType);
-          // Module aus Template übernehmen
           for (final tm in template.modules) {
-            ref.read(reportDraftNotifierProvider.notifier).updateModuleNotes(
-              // Finde das passende Modul im Draft
-              ref.read(reportDraftNotifierProvider)?.modules
-                  .where((m) => m.type == tm.type)
-                  .firstOrNull?.id ?? '',
-              tm.defaultNotes,
-            );
+            final moduleId = ref
+                .read(reportDraftNotifierProvider)
+                ?.modules
+                .where((m) => m.type == tm.type)
+                .firstOrNull
+                ?.id;
+            if (moduleId != null) {
+              ref
+                  .read(reportDraftNotifierProvider.notifier)
+                  .updateModuleNotes(moduleId, tm.defaultNotes);
+            }
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Vorlage "${template.name}" geladen')),
-          );
         },
         onDelete: (id) async {
           await _templateStorage.delete(id);
@@ -116,228 +149,563 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
     );
   }
 
+  // --- Erstbericht starten ---
+
+  void _startErstbericht(ReportType type) {
+    ref.read(reportDraftNotifierProvider.notifier).createNew(type);
+    setState(() => _mode = EditorMode.erstbericht);
+  }
+
+  // --- Folgebericht starten ---
+
+  void _startFolgebericht(ReportType type) {
+    ref.read(reportDraftNotifierProvider.notifier).createNew(type);
+    setState(() => _mode = EditorMode.folgebericht);
+  }
+
+  // --- Notizen in Draft übernehmen ---
+
+  void _syncNotesToDraft() {
+    final draft = ref.read(reportDraftNotifierProvider);
+    if (draft == null) return;
+    // Notizen in das erste Modul mit Typ allgemeineInfos oder das erste Teilhabeziel schreiben
+    final notesModule = draft.modules.firstWhere(
+      (m) => m.type == ModuleType.allgemeineInfos,
+      orElse: () => draft.modules.first,
+    );
+    ref
+        .read(reportDraftNotifierProvider.notifier)
+        .updateModuleNotes(notesModule.id, _notesController.text);
+  }
+
+  // --- BUILD ---
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(reportDraftNotifierProvider);
     final theme = Theme.of(context);
 
-    if (draft == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Neuer Bericht')),
-        body: Center(
-          child: _buildTypeSelector(theme),
-        ),
-      );
-    }
+    return switch (_mode) {
+      EditorMode.initial => _buildInitialScreen(theme),
+      EditorMode.folgebericht when draft != null && draft.previousReport.isEmpty =>
+        _buildDropScreen(theme, draft),
+      _ when draft != null => _buildEditorScreen(theme, draft),
+      _ => _buildInitialScreen(theme),
+    };
+  }
 
+  // ========== SCREEN 1: Erstbericht oder Folgebericht? ==========
+
+  Widget _buildInitialScreen(ThemeData theme) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(draft.type.label),
-        actions: [
-          // Qualitätsprüfung
-          IconButton(
-            icon: const Icon(Icons.fact_check_outlined),
-            tooltip: 'Qualitätsprüfung',
-            onPressed: () => _runQualityCheck(draft),
-          ),
-          // Template speichern
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            tooltip: 'Als Vorlage speichern',
-            onPressed: () => _saveAsTemplate(draft),
-          ),
-          const SizedBox(width: 8),
-          // Generieren
-          FilledButton.icon(
-            onPressed: _canGenerate(draft)
-                ? () => context.go('/generate')
-                : null,
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('Generieren'),
-          ),
-          const SizedBox(width: 16),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+        title: const Text('Neuer Bericht'),
       ),
-      body: Row(
-        children: [
-          // Hauptbereich: Module
-          Expanded(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 550),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Qualitäts-Panel
-                if (_qualityIssues != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: QualityPanel(issues: _qualityIssues!),
+                Icon(Icons.description_outlined, size: 72,
+                    color: theme.colorScheme.primary),
+                const SizedBox(height: 24),
+                Text('Was möchtest du erstellen?',
+                    style: theme.textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                Text(
+                  'Wähle zuerst den Berichtstyp und ob ein Vorbericht vorliegt.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
 
-                // Alter Bericht Toggle
-                _buildPreviousReportSection(draft, theme),
-                const Divider(height: 1),
-
-                // Module (ReorderableListView)
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: draft.modules.length,
-                    onReorder: (oldIndex, newIndex) {
-                      ref
-                          .read(reportDraftNotifierProvider.notifier)
-                          .reorderModules(oldIndex, newIndex);
-                    },
-                    itemBuilder: (context, index) {
-                      final module = draft.modules[index];
-                      return ModuleCard(
-                        key: ValueKey(module.id),
-                        module: module,
-                        expanded: _expandedModuleId == module.id,
-                        onToggleExpand: () {
-                          setState(() {
-                            _expandedModuleId =
-                                _expandedModuleId == module.id
-                                    ? null
-                                    : module.id;
-                          });
-                        },
-                        onNotesChanged: (notes) {
-                          ref
-                              .read(reportDraftNotifierProvider.notifier)
-                              .updateModuleNotes(module.id, notes);
-                        },
-                        onRemove: module.type.required
-                            ? null
-                            : () {
-                                ref
-                                    .read(
-                                        reportDraftNotifierProvider.notifier)
-                                    .removeModule(module.id);
-                              },
-                      );
-                    },
+                // Berichtstyp
+                for (final type in ReportType.values) ...[
+                  Text(type.label,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                      )),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _choiceCard(
+                          theme,
+                          icon: Icons.add_circle_outline,
+                          title: 'Erstbericht',
+                          subtitle: 'Komplett neuer Bericht',
+                          onTap: () => _startErstbericht(type),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _choiceCard(
+                          theme,
+                          icon: Icons.update,
+                          title: 'Folgebericht',
+                          subtitle: 'Basierend auf Vorbericht',
+                          onTap: () => _startFolgebericht(type),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 24),
+                ],
+
+                const Divider(),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _loadTemplate,
+                  icon: const Icon(Icons.folder_open),
+                  label: const Text('Aus Vorlage erstellen'),
                 ),
               ],
             ),
           ),
-
-          // Palette (rechts)
-          ModulePalette(
-            onAddModule: (type, domain) {
-              final notifier =
-                  ref.read(reportDraftNotifierProvider.notifier);
-              if (type == ModuleType.teilhabeziel) {
-                notifier.addGoal();
-              } else if (type == ModuleType.icfDomain && domain != null) {
-                notifier.addIcfDomain(domain);
-              } else {
-                notifier.addModule(ReportModule(type: type));
-              }
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildTypeSelector(ThemeData theme) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 500),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.description_outlined, size: 64,
-              color: theme.colorScheme.primary),
-          const SizedBox(height: 24),
-          Text('Berichtstyp wählen', style: theme.textTheme.headlineSmall),
-          const SizedBox(height: 32),
-          for (final type in ReportType.values) ...[
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: ListTile(
-                leading: Icon(
-                  type == ReportType.informationsbericht
-                      ? Icons.article_outlined
-                      : Icons.medical_information_outlined,
-                  color: theme.colorScheme.primary,
-                ),
-                title: Text(type.label),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  ref
-                      .read(reportDraftNotifierProvider.notifier)
-                      .createNew(type);
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: _loadTemplate,
-            icon: const Icon(Icons.folder_open),
-            label: const Text('Aus Vorlage erstellen'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPreviousReportSection(ReportDraft draft, ThemeData theme) {
-    return ExpansionTile(
-      initiallyExpanded: _showPreviousReport,
-      onExpansionChanged: (v) => setState(() => _showPreviousReport = v),
-      leading: const Icon(Icons.history),
-      title: const Text('Vorheriger Bericht (optional)'),
-      subtitle: draft.previousReport.isEmpty
-          ? const Text('Keinen Vorbericht eingefügt')
-          : Text('${draft.previousReport.split('\n').length} Zeilen'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  Widget _choiceCard(
+    ThemeData theme, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: _importPdf,
-                    icon: const Icon(Icons.picture_as_pdf),
-                    label: const Text('PDF importieren'),
+              Icon(icon, size: 36, color: theme.colorScheme.primary),
+              const SizedBox(height: 12),
+              Text(title, style: theme.textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 8),
+                  textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ========== SCREEN 2: Vorbericht importieren (Drag & Drop) ==========
+
+  Widget _buildDropScreen(ThemeData theme, ReportDraft draft) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => setState(() => _mode = EditorMode.initial),
+        ),
+        title: const Text('Vorbericht importieren'),
+      ),
+      body: DropTarget(
+        onDragDone: _handleFileDrop,
+        onDragEntered: (_) => setState(() => _isDragging = true),
+        onDragExited: (_) => setState(() => _isDragging = false),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Text('Vorherigen Bericht laden',
+                      style: theme.textTheme.headlineSmall),
+                  const SizedBox(height: 8),
                   Text(
-                    'oder Text manuell einfügen:',
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    'Der Vorbericht dient als Grundlage. Die KI vergleicht ihn '
+                    'mit deinen Notizen und erstellt den Folgebericht.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Drop-Zone
+                  Expanded(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: _isDragging
+                            ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                            : theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _isDragging
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outlineVariant,
+                          width: _isDragging ? 3 : 1.5,
+                        ),
+                      ),
+                      child: _previousReportController.text.isEmpty
+                          ? _buildEmptyDropZone(theme)
+                          : _buildFilledDropZone(theme),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Aktions-Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: _importPdf,
+                        icon: const Icon(Icons.picture_as_pdf),
+                        label: const Text('PDF auswählen'),
+                      ),
+                      const SizedBox(width: 12),
+                      if (_previousReportController.text.isNotEmpty)
+                        FilledButton.icon(
+                          onPressed: () {
+                            // Weiter zum Editor
+                            setState(() {});
+                          },
+                          icon: const Icon(Icons.arrow_forward),
+                          label: const Text('Weiter'),
+                        ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _previousReportController,
-                maxLines: 8,
-                decoration: const InputDecoration(
-                  hintText:
-                      'Vorherigen Bericht hier einfügen (Copy & Paste)...\n\n'
-                      'Dieser wird pseudonymisiert und der KI als Kontext '
-                      'für die Fortschreibung mitgegeben.',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (text) {
-                  ref
-                      .read(reportDraftNotifierProvider.notifier)
-                      .updatePreviousReport(text);
-                },
-              ),
-            ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyDropZone(ThemeData theme) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.file_download_outlined, size: 64,
+            color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+        const SizedBox(height: 16),
+        Text('PDF oder Textdatei hierher ziehen',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            )),
+        const SizedBox(height: 8),
+        Text('oder Text unten einfügen',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            )),
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: TextField(
+            controller: _previousReportController,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              hintText: 'Oder Vorbericht hier einfügen (Copy & Paste)...',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (text) {
+              ref
+                  .read(reportDraftNotifierProvider.notifier)
+                  .updatePreviousReport(text);
+              setState(() {});
+            },
           ),
         ),
       ],
     );
   }
 
+  Widget _buildFilledDropZone(ThemeData theme) {
+    final lineCount = _previousReportController.text.split('\n').length;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green.shade700),
+              const SizedBox(width: 8),
+              Text('Vorbericht geladen ($lineCount Zeilen)',
+                  style: theme.textTheme.titleSmall),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () {
+                  _previousReportController.clear();
+                  ref
+                      .read(reportDraftNotifierProvider.notifier)
+                      .updatePreviousReport('');
+                  setState(() {});
+                },
+                icon: const Icon(Icons.close, size: 18),
+                label: const Text('Entfernen'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  _previousReportController.text,
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== SCREEN 3: Editor (Module + Notizen) ==========
+
+  Widget _buildEditorScreen(ThemeData theme, ReportDraft draft) {
+    final isFollowUp = _mode == EditorMode.folgebericht;
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            ref.read(reportDraftNotifierProvider.notifier).createNew(draft.type);
+            setState(() => _mode = EditorMode.initial);
+          },
+        ),
+        title: Text(isFollowUp
+            ? '${draft.type.label} – Folgebericht'
+            : '${draft.type.label} – Erstbericht'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.fact_check_outlined),
+            tooltip: 'Qualitätsprüfung',
+            onPressed: () => setState(() {
+              _qualityIssues = QualityChecker.checkDraft(draft);
+            }),
+          ),
+          IconButton(
+            icon: const Icon(Icons.save_outlined),
+            tooltip: 'Als Vorlage speichern',
+            onPressed: () => _saveAsTemplate(draft),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: _canGenerate(draft) ? () {
+              _syncNotesToDraft();
+              context.go('/generate');
+            } : null,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Generieren'),
+          ),
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: DropTarget(
+        onDragDone: _handleFileDrop,
+        onDragEntered: (_) => setState(() => _isDragging = true),
+        onDragExited: (_) => setState(() => _isDragging = false),
+        child: Stack(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Qualitäts-Panel
+                      if (_qualityIssues != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: QualityPanel(issues: _qualityIssues!),
+                        ),
+
+                      // Vorbericht-Hinweis (Folgebericht)
+                      if (isFollowUp && draft.previousReport.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.06),
+                            border: Border.all(
+                                color: Colors.green.withValues(alpha: 0.3)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.check_circle,
+                                  color: Colors.green.shade700, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Vorbericht geladen '
+                                  '(${draft.previousReport.split('\n').length} Zeilen). '
+                                  'Trage unten die aktuellen Veränderungen als Stichpunkte ein.',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Freies Notizfeld (Folgebericht)
+                      if (isFollowUp) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: TextField(
+                            controller: _notesController,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              labelText: 'Aktuelle Notizen / Veränderungen',
+                              hintText:
+                                  'Was hat sich seit dem letzten Bericht verändert?\n'
+                                  '• Neue Ziele, Fortschritte, Rückschritte\n'
+                                  '• Änderungen in der Lebenssituation\n'
+                                  '• FLS-Anpassungen',
+                              hintMaxLines: 5,
+                              border: OutlineInputBorder(),
+                              alignLabelWithHint: true,
+                            ),
+                            onChanged: (text) {
+                              // Notizen live in allgemeineInfos-Modul schreiben
+                              _syncNotesToDraft();
+                            },
+                          ),
+                        ),
+                        const Divider(height: 24),
+                      ],
+
+                      // Module (ReorderableListView)
+                      Expanded(
+                        child: ReorderableListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: draft.modules.length,
+                          onReorder: (oldIndex, newIndex) {
+                            ref
+                                .read(reportDraftNotifierProvider.notifier)
+                                .reorderModules(oldIndex, newIndex);
+                          },
+                          itemBuilder: (context, index) {
+                            final module = draft.modules[index];
+                            return ModuleCard(
+                              key: ValueKey(module.id),
+                              module: module,
+                              expanded: _expandedModuleId == module.id,
+                              onToggleExpand: () {
+                                setState(() {
+                                  _expandedModuleId =
+                                      _expandedModuleId == module.id
+                                          ? null
+                                          : module.id;
+                                });
+                              },
+                              onNotesChanged: (notes) {
+                                ref
+                                    .read(reportDraftNotifierProvider.notifier)
+                                    .updateModuleNotes(module.id, notes);
+                              },
+                              onRemove: module.type.required
+                                  ? null
+                                  : () {
+                                      ref
+                                          .read(reportDraftNotifierProvider
+                                              .notifier)
+                                          .removeModule(module.id);
+                                    },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Palette (rechts)
+                ModulePalette(
+                  onAddModule: (type, domain) {
+                    final notifier =
+                        ref.read(reportDraftNotifierProvider.notifier);
+                    if (type == ModuleType.teilhabeziel) {
+                      notifier.addGoal();
+                    } else if (type == ModuleType.icfDomain && domain != null) {
+                      notifier.addIcfDomain(domain);
+                    } else {
+                      notifier.addModule(ReportModule(type: type));
+                    }
+                  },
+                ),
+              ],
+            ),
+
+            // Drag & Drop Overlay
+            if (_isDragging)
+              Positioned.fill(
+                child: Container(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 48, vertical: 32),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                            color: theme.colorScheme.primary, width: 3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 20,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.file_download_outlined,
+                              size: 64, color: theme.colorScheme.primary),
+                          const SizedBox(height: 16),
+                          Text('Bericht hier ablegen',
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                  color: theme.colorScheme.primary)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   bool _canGenerate(ReportDraft draft) {
+    if (_mode == EditorMode.folgebericht) {
+      return draft.previousReport.isNotEmpty;
+    }
     return draft.modules.any((m) => m.notes.trim().isNotEmpty);
   }
 }

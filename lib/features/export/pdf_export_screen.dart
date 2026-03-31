@@ -41,7 +41,13 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
 
     if (draft == null || draft.generatedText == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('PDF Export')),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go('/editor'),
+          ),
+          title: const Text('PDF Export'),
+        ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -62,6 +68,10 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/editor'),
+        ),
         title: const Text('PDF Export'),
         actions: [
           IconButton(

@@ -17,12 +17,15 @@ class OpenAIAdapter implements LLMAdapter {
   String get name => 'OpenAI GPT-4o';
 
   @override
-  String get defaultModel => 'gpt-4o';
+  String get defaultModel => 'gpt-5.4-2026-03-05';
 
   @override
   List<String> get availableModels => [
+        'gpt-5.4-2026-03-05',
+        'gpt-5.4-mini-2026-03-17',
+        'gpt-5.4-nano-2026-03-17',
+        'o3',
         'gpt-4o',
-        'gpt-4o-mini',
       ];
 
   @override

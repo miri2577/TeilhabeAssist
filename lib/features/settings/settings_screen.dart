@@ -1,7 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/storage/settings_storage.dart';
+import '../../core/theme/app_settings_provider.dart';
 import '../api/providers/api_providers.dart';
+import '../pseudonymization/providers/pseudonym_providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -21,12 +28,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _anthropicKeyController = TextEditingController(
-      text: ref.read(apiKeyProvider),
-    );
-    _openaiKeyController = TextEditingController(
-      text: ref.read(openaiApiKeyProvider),
-    );
+    _anthropicKeyController =
+        TextEditingController(text: ref.read(apiKeyProvider));
+    _openaiKeyController =
+        TextEditingController(text: ref.read(openaiApiKeyProvider));
     _initStorage();
   }
 
@@ -84,80 +89,203 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _exportDictionary() async {
+    final dictionary = ref.read(userDictionaryProvider);
+    final json = dictionary.exportToJson();
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Wörterbuch exportieren',
+      fileName: 'teilhabe_woerterbuch.json',
+    );
+    if (path == null) return;
+    await File(path).writeAsString(json);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Wörterbuch exportiert')),
+      );
+    }
+  }
+
+  Future<void> _importDictionary() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final bytes = result.files.first.bytes;
+    if (bytes == null) return;
+
+    try {
+      final json = utf8.decode(bytes);
+      final dictionary = ref.read(userDictionaryProvider);
+      final count = await dictionary.importFromJson(json);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$count Einträge importiert')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import fehlgeschlagen: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedProvider = ref.watch(selectedProviderProvider);
     final adapter = ref.watch(llmAdapterProvider);
     final selectedModel = ref.watch(selectedModelProvider);
+    final appSettings = ref.watch(appSettingsProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Einstellungen')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => GoRouter.of(context).go('/'),
+        ),
+        title: const Text('Einstellungen'),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              // Provider-Auswahl
-              Text('API-Provider', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
+              // === DARSTELLUNG ===
+              _sectionTitle('Darstellung', theme),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     children: [
-                      for (final provider in LLMProvider.values) ...[
-                        Expanded(
-                          child: ChoiceChip(
-                            label: Text(provider.label),
-                            selected: selectedProvider == provider,
-                            onSelected: (selected) {
-                              if (selected) {
-                                ref
-                                    .read(selectedProviderProvider.notifier)
-                                    .state = provider;
-                                _settingsStorage.selectedProvider = provider.name;
-                                // Modell auf Default des neuen Providers setzen
-                                final newModel = ref.read(llmAdapterProvider).defaultModel;
-                                ref
-                                    .read(selectedModelProvider.notifier)
-                                    .state = newModel;
-                                _settingsStorage.selectedModel = newModel;
-                                setState(() => _keyValid = null);
-                              }
-                            },
-                          ),
+                      // Theme
+                      ListTile(
+                        leading: const Icon(Icons.palette_outlined),
+                        title: const Text('Erscheinungsbild'),
+                        trailing: SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ThemeMode.light,
+                              icon: Icon(Icons.light_mode, size: 18),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.system,
+                              icon: Icon(Icons.settings_brightness, size: 18),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.dark,
+                              icon: Icon(Icons.dark_mode, size: 18),
+                            ),
+                          ],
+                          selected: {appSettings.themeMode},
+                          onSelectionChanged: (v) => ref
+                              .read(appSettingsProvider.notifier)
+                              .setThemeMode(v.first),
                         ),
-                        if (provider != LLMProvider.values.last)
-                          const SizedBox(width: 8),
-                      ],
+                      ),
+                      const Divider(),
+                      // Textgröße
+                      ListTile(
+                        leading: const Icon(Icons.text_fields),
+                        title: const Text('Textgröße'),
+                        subtitle: Slider(
+                          value: appSettings.textScaleFactor,
+                          min: 0.8,
+                          max: 1.4,
+                          divisions: 6,
+                          label:
+                              '${(appSettings.textScaleFactor * 100).round()}%',
+                          onChanged: (v) => ref
+                              .read(appSettingsProvider.notifier)
+                              .setTextScaleFactor(v),
+                        ),
+                        trailing: Text(
+                          '${(appSettings.textScaleFactor * 100).round()}%',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 24),
 
-              // API-Key
-              Text('API-Key (${adapter.name})',
-                  style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
+              // === API ===
+              _sectionTitle('API-Konfiguration', theme),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Provider-Dropdown
+                      DropdownButtonFormField<LLMProvider>(
+                        initialValue: selectedProvider,
+                        decoration: const InputDecoration(
+                          labelText: 'API-Provider',
+                          prefixIcon: Icon(Icons.cloud_outlined),
+                        ),
+                        items: LLMProvider.values
+                            .map((p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(p.label),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v == null) return;
+                          ref.read(selectedProviderProvider.notifier).state = v;
+                          _settingsStorage.selectedProvider = v.name;
+                          final newModel =
+                              ref.read(llmAdapterProvider).defaultModel;
+                          ref.read(selectedModelProvider.notifier).state =
+                              newModel;
+                          _settingsStorage.selectedModel = newModel;
+                          setState(() => _keyValid = null);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Modell-Dropdown
+                      DropdownButtonFormField<String>(
+                        initialValue: adapter.availableModels.contains(selectedModel)
+                            ? selectedModel
+                            : adapter.defaultModel,
+                        decoration: const InputDecoration(
+                          labelText: 'Modell',
+                          prefixIcon: Icon(Icons.memory),
+                        ),
+                        items: adapter.availableModels
+                            .map((m) => DropdownMenuItem(
+                                  value: m,
+                                  child: Text(m),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v == null) return;
+                          ref.read(selectedModelProvider.notifier).state = v;
+                          _settingsStorage.selectedModel = v;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // API-Key
                       TextField(
-                        controller: selectedProvider == LLMProvider.anthropic
-                            ? _anthropicKeyController
-                            : _openaiKeyController,
+                        controller:
+                            selectedProvider == LLMProvider.anthropic
+                                ? _anthropicKeyController
+                                : _openaiKeyController,
                         obscureText: _obscureKey,
                         decoration: InputDecoration(
                           labelText: 'API-Key',
-                          hintText: selectedProvider == LLMProvider.anthropic
-                              ? 'sk-ant-...'
-                              : 'sk-...',
+                          hintText:
+                              selectedProvider == LLMProvider.anthropic
+                                  ? 'sk-ant-...'
+                                  : 'sk-...',
+                          prefixIcon: const Icon(Icons.vpn_key),
                           suffixIcon: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -165,8 +293,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 icon: Icon(_obscureKey
                                     ? Icons.visibility_off
                                     : Icons.visibility),
-                                onPressed: () => setState(
-                                    () => _obscureKey = !_obscureKey),
+                                onPressed: () =>
+                                    setState(() => _obscureKey = !_obscureKey),
                               ),
                               if (_keyValid == true)
                                 const Icon(Icons.check_circle,
@@ -186,8 +314,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 width: 16,
                                 height: 16,
                                 child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
+                                    CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.vpn_key),
                         label: Text(
                             _validating ? 'Prüfe...' : 'API-Key prüfen'),
@@ -198,34 +325,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Modellauswahl
-              Text('Modell', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
+              // === WÖRTERBUCH ===
+              _sectionTitle('Wörterbuch', theme),
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      for (final model in adapter.availableModels) ...[
-                        ListTile(
-                          leading: selectedModel == model
-                              ? Icon(Icons.radio_button_checked,
-                                  color: theme.colorScheme.primary)
-                              : const Icon(Icons.radio_button_unchecked),
-                          title: Text(model),
-                          subtitle: Text(_modelDescription(model)),
-                          onTap: () => ref
-                              .read(selectedModelProvider.notifier)
-                              .state = model,
-                        ),
-                      ],
-                    ],
-                  ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.menu_book_outlined),
+                      title: const Text('Wörterbuch bearbeiten'),
+                      subtitle: const Text(
+                          'Ausgeschlossene Wörter und gelernte Namen'),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () => context.go('/dictionary'),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.file_download_outlined),
+                      title: const Text('Wörterbuch exportieren'),
+                      subtitle: const Text('Als JSON-Datei speichern'),
+                      onTap: _exportDictionary,
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.file_upload_outlined),
+                      title: const Text('Wörterbuch importieren'),
+                      subtitle: const Text(
+                          'JSON-Datei laden (wird zusammengeführt)'),
+                      onTap: _importDictionary,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Info
+              // === INFO ===
+              _sectionTitle('Info', theme),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.info_outline),
+                      title: const Text('Über TeilhabeAssist'),
+                      onTap: () => _showAbout(context, theme),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Datenschutz-Hinweis
               Card(
                 color: theme.colorScheme.primaryContainer
                     .withValues(alpha: 0.3),
@@ -233,13 +382,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline,
+                      Icon(Icons.shield_outlined,
                           color: theme.colorScheme.primary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'API-Keys werden nur lokal gespeichert. '
-                          'Nur pseudonymisierte Texte werden an die API gesendet.',
+                          'Alle Daten (API-Keys, Wörterbücher, Berichte) '
+                          'werden ausschließlich lokal auf diesem Gerät gespeichert. '
+                          'Nur pseudonymisierte Texte verlassen das Gerät.',
                           style: theme.textTheme.bodySmall,
                         ),
                       ),
@@ -247,6 +397,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -254,22 +405,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  String _modelDescription(String model) {
-    if (model.contains('sonnet')) {
-      return 'Empfohlen – bestes Preis-Leistungs-Verhältnis (~0,08 €/Bericht)';
-    }
-    if (model.contains('haiku')) {
-      return 'Budget-Option (~0,03 €/Bericht)';
-    }
-    if (model.contains('opus')) {
-      return 'Premium – für komplexe BRP-Erstberichte (~0,13 €/Bericht)';
-    }
-    if (model == 'gpt-4o') {
-      return 'OpenAI Flagship (~0,06 €/Bericht)';
-    }
-    if (model == 'gpt-4o-mini') {
-      return 'OpenAI Budget-Option (~0,02 €/Bericht)';
-    }
-    return model;
+  Widget _sectionTitle(String title, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(title, style: theme.textTheme.titleMedium),
+    );
+  }
+
+  void _showAbout(BuildContext context, ThemeData theme) {
+    showAboutDialog(
+      context: context,
+      applicationName: 'TeilhabeAssist',
+      applicationVersion: '0.2.0-beta',
+      applicationIcon: Icon(
+        Icons.description_outlined,
+        size: 48,
+        color: theme.colorScheme.primary,
+      ),
+      applicationLegalese: '© 2026 Mirko Richter\n\n'
+          'KI-gestützte Berichterstellung für die Eingliederungshilfe Berlin.\n\n'
+          'Personenbezogene Daten verlassen niemals das Gerät. '
+          'Es werden ausschließlich pseudonymisierte Texte an die API übermittelt.\n\n'
+          'Basiert auf dem Teilhabeinstrument Berlin (TIB), '
+          'ICF-Klassifikation und dem Berliner Rahmenvertrag '
+          'Eingliederungshilfe (BRV EGH).',
+    );
   }
 }

@@ -24,6 +24,9 @@ class NameRecognizer {
   /// Zusätzliche gelernte Namen (pro Session/Klient)
   final Set<String> _learnedNames = {};
 
+  /// Vom Benutzer ausgeschlossene Wörter (kein Name)
+  Set<String> _excludedWords = {};
+
   static final _anredePattern = RegExp(
     r'\b(?:Herr|Frau|Hr\.|Fr\.)\s+'
     r'(?:(?:Dr\.|Prof\.|Dipl\.\-?\w+\.?)\s+)?'
@@ -43,6 +46,10 @@ class NameRecognizer {
   }
 
   void learnName(String name) => _learnedNames.add(name.toLowerCase());
+  void excludeWord(String word) => _excludedWords.add(word.toLowerCase());
+  void setExcludedWords(Set<String> words) => _excludedWords = words;
+  void setLearnedNames(Set<String> names) =>
+      _learnedNames.addAll(names);
 
   List<NameMatch> findNames(String text) {
     final matches = <NameMatch>[];
@@ -87,6 +94,7 @@ class NameRecognizer {
 
       final wordLower = word.toLowerCase();
       if (_commonWordsLower.contains(wordLower)) continue;
+      if (_excludedWords.contains(wordLower)) continue;
 
       if (_firstNamesLower.contains(wordLower) ||
           _learnedNames.contains(wordLower)) {
@@ -99,10 +107,14 @@ class NameRecognizer {
       }
     }
 
-    // 4. Niedrige Konfidenz: Großgeschriebenes Wort nicht am Satzanfang
-    //    (Über-Erkennungs-Strategie)
+    // 4. Niedrige Konfidenz: Nur Wörter die wie Namen aussehen
+    //    Im Deutschen sind ALLE Substantive großgeschrieben. Deshalb
+    //    filtern wir mit Heuristiken statt alles zu markieren:
+    //    - Nur kurze Wörter (3–12 Zeichen, typische Namenlänge)
+    //    - Keine deutschen Substantiv-Suffixe (-ung, -keit, -heit, -tion, etc.)
+    //    - Keine Komposita (>12 Zeichen sind fast immer Substantive)
     final suspiciousPattern = RegExp(
-      r'(?<=[a-zäöüß,;:]\s)([A-ZÄÖÜ][a-zäöüß]{2,})',
+      r'(?<=[a-zäöüß,;:]\s)([A-ZÄÖÜ][a-zäöüß]{2,11})',
     );
     for (final match in suspiciousPattern.allMatches(text)) {
       final word = match.group(1)!;
@@ -110,20 +122,58 @@ class NameRecognizer {
 
       final wordLower = word.toLowerCase();
       if (_commonWordsLower.contains(wordLower)) continue;
+      if (_excludedWords.contains(wordLower)) continue;
+      if (_firstNamesLower.contains(wordLower)) continue;
+      if (_learnedNames.contains(wordLower)) continue;
+      if (_looksLikeGermanNoun(wordLower)) continue;
 
-      // Nicht schon als mittlere Konfidenz erkannt
-      if (!_firstNamesLower.contains(wordLower) &&
-          !_learnedNames.contains(wordLower)) {
-        addMatch(NameMatch(
-          text: word,
-          start: match.start + match.group(0)!.indexOf(word),
-          end: match.start + match.group(0)!.indexOf(word) + word.length,
-          confidence: ConfidenceLevel.low,
-        ));
-      }
+      addMatch(NameMatch(
+        text: word,
+        start: match.start + match.group(0)!.indexOf(word),
+        end: match.start + match.group(0)!.indexOf(word) + word.length,
+        confidence: ConfidenceLevel.low,
+      ));
     }
 
     matches.sort((a, b) => a.start.compareTo(b.start));
     return matches;
+  }
+
+  /// Prüft ob ein Wort wie ein deutsches Substantiv aussieht (kein Name).
+  /// Deutsche Substantive haben typische Suffixe die Namen nie haben.
+  static bool _looksLikeGermanNoun(String wordLower) {
+    const nounSuffixes = [
+      'ung', 'keit', 'heit', 'tion', 'sion', 'ment', 'nis', 'schaft',
+      'tät', 'enz', 'anz', 'ismus', 'ität', 'eur', 'ling', 'chen',
+      'lein', 'tum', 'sal', 'sel', 'icht', 'ive', 'oge', 'thek',
+      'phie', 'gie', 'mie', 'pie', 'rie', 'sie', 'bie', 'die',
+      'fie', 'lie', 'nie', 'vie', 'zie',
+      // Verbale Substantive / Gerundien
+      'ieren', 'ieren',
+      // Adjektiv-Substantive
+      'iges', 'iges',
+    ];
+
+    for (final suffix in nounSuffixes) {
+      if (wordLower.endsWith(suffix) && wordLower.length > suffix.length + 2) {
+        return true;
+      }
+    }
+
+    // Wörter mit typischen Vorsilben die auf Substantive hindeuten
+    const nounPrefixes = [
+      'ver', 'vor', 'über', 'unter', 'ein', 'aus', 'auf', 'ab',
+      'an', 'be', 'er', 'ent', 'zer', 'miss', 'um', 'mit',
+      'nach', 'neben', 'zwischen', 'gegen', 'wieder', 'rück',
+    ];
+
+    // Wenn Vorsilbe + Rest > 8 Zeichen → wahrscheinlich Substantiv
+    if (wordLower.length > 8) {
+      for (final prefix in nounPrefixes) {
+        if (wordLower.startsWith(prefix)) return true;
+      }
+    }
+
+    return false;
   }
 }
