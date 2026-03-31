@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 import '../../core/storage/audit_log.dart';
 import '../api/models/report_request.dart';
 import '../api/providers/api_providers.dart';
@@ -30,7 +34,6 @@ class GenerateScreen extends ConsumerStatefulWidget {
 class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   GenerateStep _step = GenerateStep.pseudonymize;
   PseudonymResult? _pseudonymResult;
-  PseudonymResult? _previousReportResult;
   bool _confirmed = false;
   String _generatedText = '';
   bool _isStreaming = false;
@@ -51,23 +54,35 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     _runPseudonymization();
   }
 
+  // Eine einzige Engine für ALLE Texte – verhindert Platzhalter-Kollisionen
+  PseudonymEngine? _engine;
+  String? _pseudonymizedNotes;
+  String? _pseudonymizedPreviousReport;
+
   void _runPseudonymization() {
     final draft = ref.read(reportDraftNotifierProvider);
     if (draft == null) return;
 
-    // BRP Seite-4-Schutz: Prüfe VOR der Pseudonymisierung
+    // BRP Seite-4-Schutz
     if (draft.type == ReportType.brp) {
       final allText = '${draft.allNotesAsText}\n${draft.previousReport}';
       _page4Warnings = BrpPage4Detector.detect(allText);
     }
 
-    final engine = ref.read(pseudonymEngineProvider);
-    _pseudonymResult = engine.pseudonymize(draft.allNotesAsText);
+    // EINE Engine für alle Texte → eindeutige Platzhalter-Nummern
+    _engine = PseudonymEngine();
+    final dictionary = ref.read(userDictionaryProvider);
+    _engine!.loadUserDictionary(dictionary);
 
+    // Vorbericht ZUERST pseudonymisieren (gleiche Namen bekommen gleiche Platzhalter)
     if (draft.previousReport.isNotEmpty) {
-      final prevEngine = PseudonymEngine();
-      _previousReportResult = prevEngine.pseudonymize(draft.previousReport);
+      final prevResult = _engine!.pseudonymize(draft.previousReport);
+      _pseudonymizedPreviousReport = prevResult.cleanText;
     }
+
+    // Dann Notizen – keepMappings: true damit gleiche Namen gleiche Platzhalter bekommen
+    _pseudonymResult = _engine!.pseudonymize(draft.allNotesAsText, keepMappings: true);
+    _pseudonymizedNotes = _pseudonymResult!.cleanText;
 
     setState(() => _step = GenerateStep.review);
   }
@@ -109,8 +124,8 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         apiKey: apiKey,
         model: model,
         reportType: currentDraft.type,
-        pseudonymizedNotes: _pseudonymResult!.cleanText,
-        pseudonymizedPreviousReport: _previousReportResult?.cleanText,
+        pseudonymizedNotes: _pseudonymizedNotes ?? _pseudonymResult!.cleanText,
+        pseudonymizedPreviousReport: _pseudonymizedPreviousReport,
       );
 
       // F2: Streaming mit cancelbarer Subscription
@@ -135,18 +150,10 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       if (!mounted) return;
 
       // Rekonstruktion: Platzhalter durch Originaldaten ersetzen
+      // Nutzt die EINE Engine die ALLE Mappings kennt
       var finalText = _generatedText;
-      if (_pseudonymResult != null) {
-        finalText = PseudonymEngine.reconstructWith(
-          finalText,
-          _pseudonymResult!.mappings,
-        );
-      }
-      if (_previousReportResult != null) {
-        finalText = PseudonymEngine.reconstructWith(
-          finalText,
-          _previousReportResult!.mappings,
-        );
+      if (_engine != null) {
+        finalText = _engine!.reconstruct(finalText);
       }
 
       // F1: Validierung – Prüfe ob noch Platzhalter im Text
@@ -162,8 +169,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
 
       // Audit-Log: Berichtsgenerierung protokollieren
       ref.read(auditLogProvider).log(AuditEvent.reportGenerated(
-        mappingCount: (_pseudonymResult?.totalReplacements ?? 0) +
-            (_previousReportResult?.totalReplacements ?? 0),
+        mappingCount: _pseudonymResult?.totalReplacements ?? 0,
         model: ref.read(selectedModelProvider),
         reportType: currentDraft.type.name,
       ));
@@ -180,8 +186,21 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         _step = GenerateStep.result;
       });
     } catch (e) {
+      String errorMsg = e.toString();
+      // Bei DioException: Response-Body auslesen für bessere Fehlermeldung
+      if (e is DioException && e.response?.data != null) {
+        try {
+          final data = e.response!.data;
+          if (data is Map) {
+            final apiError = data['error'];
+            if (apiError is Map) {
+              errorMsg = 'API-Fehler: ${apiError['message'] ?? apiError}';
+            }
+          }
+        } catch (_) {}
+      }
       setState(() {
-        _error = e.toString();
+        _error = errorMsg;
         _isStreaming = false;
       });
     }
@@ -462,6 +481,20 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     );
   }
 
+  Future<void> _exportAsTxt() async {
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Bericht als Textdatei speichern',
+      fileName: 'Bericht_${DateTime.now().toIso8601String().substring(0, 10)}.txt',
+    );
+    if (path == null) return;
+    await File(path).writeAsString(_generatedText);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bericht als TXT gespeichert')),
+      );
+    }
+  }
+
   Widget _buildResultStep(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -504,19 +537,36 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        // Export-Buttons
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
           children: [
             OutlinedButton.icon(
               onPressed: () => context.go('/editor'),
-              icon: const Icon(Icons.edit),
-              label: const Text('Zurück zum Editor'),
+              icon: const Icon(Icons.edit, size: 18),
+              label: const Text('Zurück'),
             ),
-            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: _generatedText));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('In Zwischenablage kopiert')),
+                );
+              },
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Kopieren'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _exportAsTxt(),
+              icon: const Icon(Icons.text_snippet_outlined, size: 18),
+              label: const Text('Als TXT'),
+            ),
             FilledButton.icon(
               onPressed: () => context.go('/export'),
-              icon: const Icon(Icons.picture_as_pdf),
-              label: const Text('Als PDF exportieren'),
+              icon: const Icon(Icons.picture_as_pdf, size: 18),
+              label: const Text('Als PDF'),
             ),
           ],
         ),

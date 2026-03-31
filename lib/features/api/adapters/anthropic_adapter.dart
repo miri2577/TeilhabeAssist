@@ -111,7 +111,8 @@ class AnthropicAdapter implements LLMAdapter {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) return false;
+      if (e.response?.statusCode == 401 ||
+          e.response?.statusCode == 403) return false;
       rethrow;
     }
   }

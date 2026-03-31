@@ -424,7 +424,10 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   }
 
   Widget _buildFilledDropZone(ThemeData theme) {
-    final lineCount = _previousReportController.text.split('\n').length;
+    final draft = ref.read(reportDraftNotifierProvider);
+    final reportText = draft?.previousReport ?? _previousReportController.text;
+    final charCount = reportText.length;
+    final wordCount = reportText.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -434,7 +437,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade700),
               const SizedBox(width: 8),
-              Text('Vorbericht geladen ($lineCount Zeilen)',
+              Text('Vorbericht geladen ($wordCount Wörter, $charCount Zeichen)',
                   style: theme.textTheme.titleSmall),
               const Spacer(),
               TextButton.icon(
@@ -462,7 +465,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
-                  _previousReportController.text,
+                  reportText,
                   style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
                 ),
               ),
@@ -552,7 +555,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                               Expanded(
                                 child: Text(
                                   'Vorbericht geladen '
-                                  '(${draft.previousReport.split('\n').length} Zeilen). '
+                                  '(${draft.previousReport.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length} Wörter). '
                                   'Trage unten die aktuellen Veränderungen als Stichpunkte ein.',
                                   style: const TextStyle(fontSize: 13),
                                 ),

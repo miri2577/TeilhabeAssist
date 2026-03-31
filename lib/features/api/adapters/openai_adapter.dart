@@ -100,7 +100,8 @@ class OpenAIAdapter implements LLMAdapter {
       );
       return response.statusCode == 200;
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) return false;
+      if (e.response?.statusCode == 401 ||
+          e.response?.statusCode == 403) return false;
       rethrow;
     }
   }
@@ -123,10 +124,8 @@ class OpenAIAdapter implements LLMAdapter {
     userContent.writeln('## AKTUELLE STICHPUNKTE:');
     userContent.writeln(request.pseudonymizedNotes);
 
-    return {
+    final body = <String, dynamic>{
       'model': request.model,
-      'temperature': request.temperature,
-      'max_tokens': 8000,
       'messages': [
         {
           'role': 'system',
@@ -135,5 +134,16 @@ class OpenAIAdapter implements LLMAdapter {
         {'role': 'user', 'content': userContent.toString()},
       ],
     };
+
+    // Neuere Modelle (gpt-5.x, o3) nutzen max_completion_tokens
+    if (request.model.startsWith('gpt-5') ||
+        request.model.startsWith('o3')) {
+      body['max_completion_tokens'] = 8000;
+    } else {
+      body['max_tokens'] = 8000;
+      body['temperature'] = request.temperature;
+    }
+
+    return body;
   }
 }

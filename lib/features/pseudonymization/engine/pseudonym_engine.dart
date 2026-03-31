@@ -42,7 +42,7 @@ class PseudonymEngine {
     int start,
     int end,
   ) {
-    // Kein Duplikat für denselben Originaltext in derselben Kategorie
+    // Bei Duplikat: gleichen Platzhalter wiederverwenden
     final existing = _mappings.where(
       (m) => m.original == original && m.category == category,
     );
@@ -58,11 +58,20 @@ class PseudonymEngine {
     ));
   }
 
-  /// Hauptmethode: Text pseudonymisieren
-  PseudonymResult pseudonymize(String text) {
+  /// Setzt die Engine komplett zurück
+  void reset() {
     _mappings.clear();
     _counters.clear();
     _warnings.clear();
+  }
+
+  /// Hauptmethode: Text pseudonymisieren.
+  /// Bei erneutem Aufruf auf derselben Engine werden bekannte Mappings
+  /// wiederverwendet (gleicher Name → gleicher Platzhalter).
+  PseudonymResult pseudonymize(String text, {bool keepMappings = false}) {
+    if (!keepMappings) {
+      _warnings.clear();
+    }
 
     var cleanText = text;
 

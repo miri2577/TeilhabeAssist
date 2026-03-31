@@ -83,8 +83,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _keyValid = false;
           _validating = false;
         });
+        final msg = e.toString();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e')),
+          SnackBar(
+            content: Text('Fehler bei der Validierung: '
+                '${msg.length > 200 ? '${msg.substring(0, 200)}...' : msg}'),
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     }
