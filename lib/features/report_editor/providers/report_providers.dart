@@ -1,7 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/report_draft.dart';
 import '../models/report_module.dart';
+import '../models/report_template.dart';
 import '../models/icf_domain.dart';
+import '../services/draft_storage.dart';
+
+final draftStorageProvider = Provider<DraftStorage>((ref) => DraftStorage());
 
 final currentDraftProvider = StateProvider<ReportDraft?>((ref) => null);
 
@@ -10,10 +14,34 @@ final isGeneratingProvider = StateProvider<bool>((ref) => false);
 final streamedTextProvider = StateProvider<String>((ref) => '');
 
 class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
-  ReportDraftNotifier() : super(null);
+  final DraftStorage? _storage;
+
+  ReportDraftNotifier([this._storage]) : super(null) {
+    addListener(_onStateChanged);
+  }
+
+  void _onStateChanged(ReportDraft? draft) {
+    if (draft != null) {
+      _storage?.saveDraft(draft);
+    }
+  }
+
+  void restoreFromStorage() {
+    final saved = _storage?.loadDraft();
+    if (saved != null) state = saved;
+  }
+
+  void clearDraft() {
+    state = null;
+    _storage?.clearDraft();
+  }
 
   void createNew(ReportType type) {
     state = ReportDraft(type: type);
+  }
+
+  void loadFromTemplate(ReportTemplate template) {
+    state = template.toDraft();
   }
 
   void updatePreviousReport(String text) {
@@ -128,5 +156,6 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
 
 final reportDraftNotifierProvider =
     StateNotifierProvider<ReportDraftNotifier, ReportDraft?>((ref) {
-  return ReportDraftNotifier();
+  final storage = ref.watch(draftStorageProvider);
+  return ReportDraftNotifier(storage);
 });

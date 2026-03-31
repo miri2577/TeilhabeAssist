@@ -32,14 +32,50 @@ class AuthService {
     await _box!.put('password_hash', hash);
   }
 
-  /// Passwort prüfen
+  // Rate-Limiting
+  int _failedAttempts = 0;
+  DateTime? _lockoutUntil;
+
+  /// Prüft ob Account gesperrt ist
+  bool get isLockedOut {
+    if (_lockoutUntil == null) return false;
+    if (DateTime.now().isAfter(_lockoutUntil!)) {
+      _lockoutUntil = null;
+      return false;
+    }
+    return true;
+  }
+
+  /// Verbleibende Sperrzeit in Sekunden
+  int get lockoutSeconds {
+    if (_lockoutUntil == null) return 0;
+    return _lockoutUntil!.difference(DateTime.now()).inSeconds.clamp(0, 300);
+  }
+
+  /// Passwort prüfen (mit Rate-Limiting)
   bool validatePassword(String password) {
     if (!isInitialized || !hasPassword) return false;
+    if (isLockedOut) return false;
+
     final saltBase64 = _box!.get('password_salt')!;
     final salt = base64Decode(saltBase64);
     final storedHash = _box!.get('password_hash')!;
     final inputHash = _hashPassword(password, salt);
-    return storedHash == inputHash;
+    final valid = storedHash == inputHash;
+
+    if (valid) {
+      _failedAttempts = 0;
+      _lockoutUntil = null;
+    } else {
+      _failedAttempts++;
+      if (_failedAttempts >= 10) {
+        _lockoutUntil = DateTime.now().add(const Duration(minutes: 5));
+      } else if (_failedAttempts >= 5) {
+        _lockoutUntil = DateTime.now().add(const Duration(seconds: 30));
+      }
+    }
+
+    return valid;
   }
 
   /// Passwort ändern (altes muss stimmen)

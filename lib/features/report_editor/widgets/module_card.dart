@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../models/fls_data.dart';
 import '../models/report_module.dart';
+import 'fls_editor.dart';
 
 class ModuleCard extends StatelessWidget {
   final ReportModule module;
@@ -82,8 +84,16 @@ class ModuleCard extends StatelessWidget {
             ),
           ),
 
-          // Expanded: Notizen-Editor
-          if (expanded)
+          // Expanded: Notizen-Editor oder FLS-Editor
+          if (expanded && module.type == ModuleType.flsUebersicht)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: FlsEditor(
+                data: FlsData(),
+                onChanged: (data) => onNotesChanged(data.toPromptText()),
+              ),
+            ),
+          if (expanded && module.type != ModuleType.flsUebersicht)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: TextField(

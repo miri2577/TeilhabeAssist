@@ -124,20 +124,10 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
       builder: (_) => LoadTemplateDialog(
         templates: _templateStorage.getAll(),
         onSelect: (template) {
-          ref.read(reportDraftNotifierProvider.notifier).createNew(template.reportType);
-          for (final tm in template.modules) {
-            final moduleId = ref
-                .read(reportDraftNotifierProvider)
-                ?.modules
-                .where((m) => m.type == tm.type)
-                .firstOrNull
-                ?.id;
-            if (moduleId != null) {
-              ref
-                  .read(reportDraftNotifierProvider.notifier)
-                  .updateModuleNotes(moduleId, tm.defaultNotes);
-            }
-          }
+          // Kompletten Draft aus Template erzeugen (inkl. aller Module + Notes)
+          final notifier = ref.read(reportDraftNotifierProvider.notifier);
+          notifier.loadFromTemplate(template);
+          setState(() => _mode = EditorMode.erstbericht);
         },
         onDelete: (id) async {
           await _templateStorage.delete(id);

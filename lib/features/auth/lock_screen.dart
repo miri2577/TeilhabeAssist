@@ -39,10 +39,20 @@ class _LockScreenState extends State<LockScreen> {
 
   void _login() {
     final password = _passwordController.text;
+    if (widget.authService.isLockedOut) {
+      setState(() => _error =
+          'Zu viele Fehlversuche. Gesperrt für ${widget.authService.lockoutSeconds} Sekunden.');
+      return;
+    }
     if (widget.authService.validatePassword(password)) {
       widget.onAuthenticated();
     } else {
-      setState(() => _error = 'Falsches Passwort');
+      if (widget.authService.isLockedOut) {
+        setState(() => _error =
+            'Zu viele Fehlversuche. Gesperrt für ${widget.authService.lockoutSeconds} Sekunden.');
+      } else {
+        setState(() => _error = 'Falsches Passwort');
+      }
     }
   }
 

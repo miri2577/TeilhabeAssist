@@ -36,12 +36,11 @@ class _PrivacySignatureScreenState
   @override
   void initState() {
     super.initState();
-    _signatureController.addListener(() {
-      final signed = _signatureController.isNotEmpty;
-      if (signed != _hasSigned) {
-        setState(() => _hasSigned = signed);
-      }
-    });
+    _signatureController.addListener(_onSignatureChanged);
+  }
+
+  void _onSignatureChanged() {
+    if (mounted) setState(() => _hasSigned = _signatureController.isNotEmpty);
   }
 
   @override
@@ -213,9 +212,20 @@ class _PrivacySignatureScreenState
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Signature(
-                          controller: _signatureController,
-                          backgroundColor: Colors.white,
+                        child: Listener(
+                          onPointerUp: (_) {
+                            // Signature-Package feuert Listener nicht bei Zeichnen,
+                            // daher manuell nach Pointer-Up prüfen
+                            Future.delayed(const Duration(milliseconds: 50), () {
+                              if (mounted) {
+                                setState(() => _hasSigned = _signatureController.isNotEmpty);
+                              }
+                            });
+                          },
+                          child: Signature(
+                            controller: _signatureController,
+                            backgroundColor: Colors.white,
+                          ),
                         ),
                       ),
                     ),

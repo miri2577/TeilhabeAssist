@@ -392,10 +392,26 @@ class _PseudonymPreviewScreenState
   }
 
   void _onRelease() {
-    // TODO: Pseudonymisierten Text an API-Modul weiterleiten
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Text für API freigegeben (API-Modul noch nicht implementiert)'),
+    final result = ref.read(pseudonymResultProvider);
+    if (result == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
+        title: const Text('Pseudonymisierung erfolgreich'),
+        content: Text(
+          '${result.totalReplacements} Ersetzungen durchgeführt.\n'
+          '${result.warningCount} Warnungen.\n\n'
+          'Der Text kann jetzt sicher an die API gesendet werden.\n'
+          'Nutze den Berichtseditor für die vollständige Generierung.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }

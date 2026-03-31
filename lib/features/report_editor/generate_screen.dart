@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,6 +36,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   String? _error;
   List<BrpPage4Warning> _page4Warnings = [];
   List<QualityIssue> _qualityIssues = [];
+  StreamSubscription<String>? _streamSubscription;
+
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -103,11 +112,26 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         pseudonymizedPreviousReport: _previousReportResult?.cleanText,
       );
 
-      // Streaming
-      await for (final chunk in adapter.generateReportStream(request)) {
-        if (!mounted) return;
-        setState(() => _generatedText += chunk);
-      }
+      // F2: Streaming mit cancelbarer Subscription
+      final completer = Completer<void>();
+      _streamSubscription = adapter.generateReportStream(request).listen(
+        (chunk) {
+          if (!mounted) {
+            _streamSubscription?.cancel();
+            return;
+          }
+          setState(() => _generatedText += chunk);
+        },
+        onError: (e) {
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        },
+      );
+      await completer.future;
+
+      if (!mounted) return;
 
       // Rekonstruktion: Platzhalter durch Originaldaten ersetzen
       var finalText = _generatedText;
@@ -124,9 +148,17 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         );
       }
 
+      // F1: Validierung – Prüfe ob noch Platzhalter im Text
+      final remainingPlaceholders = RegExp(r'\[[A-Z]+_\d{3}\]');
+      if (remainingPlaceholders.hasMatch(finalText)) {
+        final matches = remainingPlaceholders.allMatches(finalText).toList();
+        _error = 'Rekonstruktion unvollständig: ${matches.length} Platzhalter '
+            'konnten nicht aufgelöst werden (${matches.take(3).map((m) => m.group(0)).join(", ")}). '
+            'Bericht NICHT exportieren!';
+      }
+
       ref.read(reportDraftNotifierProvider.notifier).setGeneratedText(finalText);
 
-      // Qualitätsprüfung des generierten Texts
       final draft = ref.read(reportDraftNotifierProvider);
       _qualityIssues = QualityChecker.checkGeneratedText(
         finalText,

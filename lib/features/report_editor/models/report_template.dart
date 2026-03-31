@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'icf_domain.dart';
 import 'report_draft.dart';
 import 'report_module.dart';
 
@@ -16,6 +17,30 @@ class ReportTemplate {
     required this.createdAt,
     required this.modules,
   });
+
+  /// Erstellt einen neuen Draft aus diesem Template
+  ReportDraft toDraft() {
+    final modules = this.modules.map((tm) {
+      IcfDomain? domain;
+      if (tm.icfDomainCode != null) {
+        domain = IcfDomain.values.firstWhere(
+          (d) => d.code == tm.icfDomainCode,
+          orElse: () => IcfDomain.d1,
+        );
+      }
+      return ReportModule(
+        type: tm.type,
+        icfDomain: domain,
+        notes: tm.defaultNotes,
+        goalNumber: tm.goalNumber,
+      );
+    }).toList();
+
+    return ReportDraft(
+      type: reportType,
+      modules: modules,
+    );
+  }
 
   /// Erstellt ein Template aus einem existierenden Draft
   factory ReportTemplate.fromDraft(ReportDraft draft, String name) {
