@@ -283,20 +283,68 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
         .where((m) => m.type.name == 'persondaten')
         .firstOrNull?.notes ?? '';
 
+    // Key-Value-Paare aus Freitext extrahieren (z.B. "Familienname: Müller")
+    final allText = '$kopf\n$person';
+    final fields = _parseKeyValueLines(allText);
+
+    final familienname = fields['familienname'] ?? fields['name'] ?? '';
+    final vorname = fields['vorname'] ?? fields['vornamen'] ?? '';
+    final fullName = familienname.isNotEmpty || vorname.isNotEmpty
+        ? '$familienname, $vorname'.replaceAll(RegExp(r'^,\s*|,\s*$'), '')
+        : (person.isNotEmpty ? person.split('\n').first.trim() : '');
+
     return {
-      'name': person.isNotEmpty ? person.split('\n').first : '',
-      'berichtszeitraum': '',
-      'leistungstyp': draft.type.label,
-      'leistungserbringer': '',
-      'familienname': '',
-      'vorname': '',
-      'geburtsdatum': '',
-      'strasse': '',
-      'plz_ort': '',
-      'telefon': '',
-      'id_kostenuebernahme': '',
-      'kontakt_le': '',
+      'name': fullName,
+      'berichtszeitraum': fields['berichtszeitraum'] ??
+          _combineFields(fields, 'berichtszeitraum_von', 'berichtszeitraum_bis'),
+      'berichtszeitraum_von': fields['berichtszeitraum von'] ??
+          fields['berichtszeitraum_von'] ?? fields['von'] ?? '',
+      'berichtszeitraum_bis': fields['berichtszeitraum bis'] ??
+          fields['berichtszeitraum_bis'] ?? fields['bis'] ?? '',
+      'leistungstyp': fields['leistungstyp'] ?? draft.type.label,
+      'leistungserbringer': fields['leistungserbringer'] ?? fields['träger'] ?? '',
+      'familienname': familienname,
+      'vorname': vorname,
+      'geburtsdatum': fields['geburtsdatum'] ?? fields['geb'] ?? '',
+      'strasse': fields['straße'] ?? fields['strasse'] ?? fields['str'] ?? '',
+      'plz_ort': fields['plz_ort'] ?? _combineFields(fields, 'plz', 'ort'),
+      'plz': fields['plz'] ?? '',
+      'ort': fields['ort'] ?? '',
+      'telefon': fields['telefon'] ?? fields['tel'] ?? '',
+      'id_kostenuebernahme': fields['id kostenübernahme'] ??
+          fields['kostenübernahme'] ?? fields['id'] ?? '',
+      'kontakt_le': fields['e-mail'] ?? fields['email'] ??
+          fields['kontakt'] ?? fields['tel nr'] ?? '',
     };
+  }
+
+  /// Parst Zeilen wie "Schlüssel: Wert" oder "Schlüssel = Wert" in eine Map.
+  Map<String, String> _parseKeyValueLines(String text) {
+    final result = <String, String>{};
+    for (final line in text.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
+      // "Schlüssel: Wert" oder "Schlüssel = Wert"
+      final match = RegExp(r'^([^:=]{2,30})\s*[:=]\s*(.+)$').firstMatch(trimmed);
+      if (match != null) {
+        final key = match.group(1)!.trim().toLowerCase();
+        final value = match.group(2)!.trim();
+        if (value.isNotEmpty) {
+          result[key] = value;
+        }
+      }
+    }
+    return result;
+  }
+
+  String _combineFields(Map<String, String> fields, String a, String b) {
+    final va = fields[a] ?? '';
+    final vb = fields[b] ?? '';
+    if (va.isEmpty && vb.isEmpty) return '';
+    if (va.isEmpty) return vb;
+    if (vb.isEmpty) return va;
+    return '$va – $vb';
   }
 
   String _generateFileName({String ext = 'pdf'}) {

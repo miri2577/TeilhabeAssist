@@ -61,7 +61,13 @@ WICHTIGE REGELN:
 - Kontextfaktoren IMMER als Förderfaktor ODER Barriere kennzeichnen
 - Niemals Diagnosen interpretieren – nur Auswirkungen auf Teilhabe beschreiben
 - Seite 4 des BRP (Krankengeschichte) niemals in den Informationsbericht übernehmen – diese ist vertraulich!
-- Personenbezogene Daten erscheinen als Platzhalter [PERSON_001] etc.
+- Personenbezogene Daten erscheinen als Platzhalter wie [PERSON_001], [ADRESSE_001], [DATUM_001] etc.
+
+PLATZHALTER-REGELN (ZWINGEND):
+- Verwende AUSSCHLIESSLICH die Platzhalter, die bereits im Eingabetext vorkommen.
+- Erfinde NIEMALS eigene Platzhalter. Wenn du einen Namen, ein Datum oder eine Adresse benötigst, die nicht als Platzhalter im Eingabetext enthalten ist, schreibe stattdessen "[ANGABE FEHLT]".
+- Ändere KEINE bestehenden Platzhalter-Nummern (z.B. [PERSON_001] nicht zu [PERSON_002] umbenennen).
+- Kopiere Platzhalter immer exakt so, wie sie im Eingabetext stehen.
 
 EINGABE-FORMAT:
 Der Nutzer liefert:
@@ -117,6 +123,12 @@ SPRACHLICHE ANFORDERUNGEN:
 - Personenzentriert
 - Geschlechtergerechte Sprache
 - Konkrete Beispiele statt vager Aussagen
-- Personenbezogene Daten erscheinen als Platzhalter [PERSON_001] etc.
+- Personenbezogene Daten erscheinen als Platzhalter wie [PERSON_001], [ADRESSE_001], [DATUM_001] etc.
+
+PLATZHALTER-REGELN (ZWINGEND):
+- Verwende AUSSCHLIESSLICH die Platzhalter, die bereits im Eingabetext vorkommen.
+- Erfinde NIEMALS eigene Platzhalter. Wenn du einen Namen, ein Datum oder eine Adresse benötigst, die nicht als Platzhalter im Eingabetext enthalten ist, schreibe stattdessen "[ANGABE FEHLT]".
+- Ändere KEINE bestehenden Platzhalter-Nummern.
+- Kopiere Platzhalter immer exakt so, wie sie im Eingabetext stehen.
 ''';
 }

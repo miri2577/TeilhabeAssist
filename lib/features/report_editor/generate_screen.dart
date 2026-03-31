@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -455,14 +456,16 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               border: Border.all(color: theme.colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                _generatedText.isEmpty
-                    ? 'Warte auf Antwort...'
-                    : _generatedText,
-                style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
-              ),
-            ),
+            child: _generatedText.isEmpty
+                ? const Center(child: Text('Warte auf Antwort...'))
+                : Markdown(
+                    data: _generatedText,
+                    selectable: true,
+                    shrinkWrap: true,
+                    styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                      p: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                    ),
+                  ),
           ),
         ),
         if (_error != null) ...[
@@ -569,12 +572,14 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               border: Border.all(color: theme.colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                _generatedText,
-                style: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+            child: Markdown(
+                data: _generatedText,
+                selectable: true,
+                shrinkWrap: true,
+                styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                  p: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                ),
               ),
-            ),
           ),
         ),
         const SizedBox(height: 16),

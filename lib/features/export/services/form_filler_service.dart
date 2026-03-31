@@ -15,9 +15,16 @@ class FormFillerService {
     required Map<String, String> metadata,
   }) async {
     // Original-Template laden
-    final templateBytes = await rootBundle.load(
-      'assets/templates/informationsbericht_101.pdf',
-    );
+    final ByteData templateBytes;
+    try {
+      templateBytes = await rootBundle.load(
+        'assets/templates/informationsbericht_101.pdf',
+      );
+    } catch (e) {
+      throw Exception(
+          'PDF-Vorlage "informationsbericht_101.pdf" konnte nicht geladen werden. '
+          'Bitte prüfen Sie, ob die Datei unter assets/templates/ vorhanden ist.');
+    }
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
     // Formularfelder befüllen (falls vorhanden – manche PDFs haben keine AcroForm-Felder)
@@ -87,9 +94,16 @@ class FormFillerService {
     required String generatedText,
     required Map<String, String> metadata,
   }) async {
-    final templateBytes = await rootBundle.load(
-      'assets/templates/mdb-ges_100_11_v12sp.pdf',
-    );
+    final ByteData templateBytes;
+    try {
+      templateBytes = await rootBundle.load(
+        'assets/templates/mdb-ges_100_11_v12sp.pdf',
+      );
+    } catch (e) {
+      throw Exception(
+          'PDF-Vorlage "mdb-ges_100_11_v12sp.pdf" konnte nicht geladen werden. '
+          'Bitte prüfen Sie, ob die Datei unter assets/templates/ vorhanden ist.');
+    }
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
     try {

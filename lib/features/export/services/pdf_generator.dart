@@ -9,6 +9,11 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 class PdfGenerator {
   PdfGenerator._();
 
+  // Hilfsobjekt um Page + Y-Position gemeinsam weiterzugeben
+  // (verhindert stale-page-Bug bei Seitenumbrüchen)
+  static ({PdfPage page, double y}) _ps(PdfPage page, double y) =>
+      (page: page, y: y);
+
   // --- Farben & Styles ---
   static final _headerColor = PdfColor(21, 101, 192); // Blau
   static final _lightBg = PdfColor(245, 247, 250);
@@ -65,44 +70,53 @@ class PdfGenerator {
 
     final allgemeineInfos = sections['allgemeine_informationen'] ??
         sections.values.firstOrNull ?? generatedText;
-    y = _drawWrappedText(page, y, allgemeineInfos, doc);
+    var ps = _drawWrappedTextPS(page, y, allgemeineInfos, doc, metadata: metadata);
+    page = ps.page; y = ps.y;
 
     // Teilhabeziele
-    y = _ensureSpace(page, y, 100, doc, metadata);
+    ps = _ensureSpacePS(page, y, 100, doc, metadata);
+    page = ps.page; y = ps.y;
     y = _drawSectionTitle(page, y,
         '3. Bericht zu vereinbarten Teilhabezielen aus der Ziel- und Leistungsplanung');
     y += 5;
 
     final ziele = sections['teilhabeziele'] ?? '';
     if (ziele.isNotEmpty) {
-      y = _drawWrappedText(page, y, ziele, doc, metadata: metadata);
+      ps = _drawWrappedTextPS(page, y, ziele, doc, metadata: metadata);
+      page = ps.page; y = ps.y;
     }
 
     // Weitere Anmerkungen
-    y = _ensureSpace(page, y, 80, doc, metadata);
+    ps = _ensureSpacePS(page, y, 80, doc, metadata);
+    page = ps.page; y = ps.y;
     y = _drawSectionTitle(page, y, 'Weitere Anmerkungen zu den Zielen');
     y += 5;
     final anmerkungen = sections['anmerkungen'] ?? '';
     if (anmerkungen.isNotEmpty) {
-      y = _drawWrappedText(page, y, anmerkungen, doc, metadata: metadata);
+      ps = _drawWrappedTextPS(page, y, anmerkungen, doc, metadata: metadata);
+      page = ps.page; y = ps.y;
     }
 
     // Zusammenfassung
-    y = _ensureSpace(page, y, 100, doc, metadata);
+    ps = _ensureSpacePS(page, y, 100, doc, metadata);
+    page = ps.page; y = ps.y;
     y = _drawSectionTitle(page, y, '4. Zusammenfassung/Ausblick');
     y += 5;
     final zusammenfassung = sections['zusammenfassung'] ?? '';
     if (zusammenfassung.isNotEmpty) {
-      y = _drawWrappedText(page, y, zusammenfassung, doc, metadata: metadata);
+      ps = _drawWrappedTextPS(page, y, zusammenfassung, doc, metadata: metadata);
+      page = ps.page; y = ps.y;
     }
 
     // Falls kein Parsing möglich war → Volltext
     if (sections.isEmpty || sections.length <= 1) {
-      y = _drawWrappedText(page, y, generatedText, doc, metadata: metadata);
+      ps = _drawWrappedTextPS(page, y, generatedText, doc, metadata: metadata);
+      page = ps.page; y = ps.y;
     }
 
     // Unterschriften-Bereich
-    y = _ensureSpace(page, y, 120, doc, metadata);
+    ps = _ensureSpacePS(page, y, 120, doc, metadata);
+    page = ps.page; y = ps.y;
     y += 20;
     y = _drawSectionTitle(page, y, '5. Unterschriften');
     y += 15;
@@ -280,7 +294,9 @@ class PdfGenerator {
     return y + 30;
   }
 
-  static double _drawWrappedText(
+  /// Zeichnet Text mit automatischen Seitenumbrüchen.
+  /// Gibt die aktuelle Page + Y-Position zurück (verhindert stale-page-Bug).
+  static ({PdfPage page, double y}) _drawWrappedTextPS(
     PdfPage page,
     double startY,
     String text,
@@ -292,7 +308,6 @@ class PdfGenerator {
     var y = startY;
     var currentPage = page;
 
-    // Text in Absätze splitten
     final paragraphs = text.split('\n');
 
     for (final para in paragraphs) {
@@ -301,7 +316,7 @@ class PdfGenerator {
         continue;
       }
 
-      // Prüfe ob Überschrift
+      // Markdown-Überschriften erkennen
       PdfFont font;
       PdfBrush brush;
       if (para.startsWith('##')) {
@@ -317,9 +332,11 @@ class PdfGenerator {
         brush = PdfSolidBrush(_black);
       }
 
-      final cleanPara = para.replaceAll(RegExp(r'^#+\s*'), '');
+      // Markdown-Syntax entfernen + Bold-Marker **...**
+      final cleanPara = para
+          .replaceAll(RegExp(r'^#+\s*'), '')
+          .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1');
 
-      // Textgröße messen
       final size = font.measureString(cleanPara,
           layoutArea: Size(bounds.width, 0));
 
@@ -333,7 +350,6 @@ class PdfGenerator {
         }
       }
 
-      // Text zeichnen
       currentPage.graphics.drawString(
         cleanPara,
         font,
@@ -345,17 +361,19 @@ class PdfGenerator {
       y += size.height + 6;
     }
 
-    return y;
+    return _ps(currentPage, y);
   }
 
-  static double _ensureSpace(PdfPage page, double y, double needed,
-      PdfDocument doc, Map<String, String> metadata) {
+  /// Stellt sicher, dass genügend Platz vorhanden ist.
+  /// Gibt die (ggf. neue) Page + Y-Position zurück.
+  static ({PdfPage page, double y}) _ensureSpacePS(PdfPage page, double y,
+      double needed, PdfDocument doc, Map<String, String> metadata) {
     final bounds = page.getClientSize();
     if (y + needed > bounds.height - 40) {
       final newPage = doc.pages.add();
-      return _drawPageHeader(newPage, metadata);
+      return _ps(newPage, _drawPageHeader(newPage, metadata));
     }
-    return y;
+    return _ps(page, y);
   }
 
   static void _drawSignatureFields(PdfPage page, double y) {
