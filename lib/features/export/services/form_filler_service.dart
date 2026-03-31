@@ -20,16 +20,20 @@ class FormFillerService {
     );
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
-    // Formularfelder befüllen (falls vorhanden)
-    final form = doc.form;
-    _trySetField(form, 'ID Kostenübernahme', metadata['id_kostenuebernahme']);
-    _trySetField(form, 'Berichtszeitraum von', metadata['berichtszeitraum_von']);
-    _trySetField(form, 'Berichtszeitraum bis', metadata['berichtszeitraum_bis']);
-    _trySetField(form, 'Leistungstyp', metadata['leistungstyp']);
-    _trySetField(form, 'Leistungserbringer', metadata['leistungserbringer']);
-    _trySetField(form, 'Familienname', metadata['familienname']);
-    _trySetField(form, 'Vorname', metadata['vorname']);
-    _trySetField(form, 'Geburtsdatum', metadata['geburtsdatum']);
+    // Formularfelder befüllen (falls vorhanden – manche PDFs haben keine AcroForm-Felder)
+    try {
+      final form = doc.form;
+      _trySetField(form, 'ID Kostenübernahme', metadata['id_kostenuebernahme']);
+      _trySetField(form, 'Berichtszeitraum von', metadata['berichtszeitraum_von']);
+      _trySetField(form, 'Berichtszeitraum bis', metadata['berichtszeitraum_bis']);
+      _trySetField(form, 'Leistungstyp', metadata['leistungstyp']);
+      _trySetField(form, 'Leistungserbringer', metadata['leistungserbringer']);
+      _trySetField(form, 'Familienname', metadata['familienname']);
+      _trySetField(form, 'Vorname', metadata['vorname']);
+      _trySetField(form, 'Geburtsdatum', metadata['geburtsdatum']);
+    } catch (_) {
+      // PDF hat keine AcroForm-Felder – nur Freitext einfügen
+    }
 
     // Fließtext in die Freitextbereiche schreiben
     final sections = _parseSections(generatedText);
@@ -71,7 +75,7 @@ class FormFillerService {
     }
 
     // Flatten form fields
-    form.flattenAllFields();
+    try { doc.form.flattenAllFields(); } catch (_) {}
 
     final bytes = Uint8List.fromList(await doc.save());
     doc.dispose();
@@ -88,12 +92,14 @@ class FormFillerService {
     );
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
-    final form = doc.form;
-    _trySetField(form, 'Name, Vorname', '${metadata['familienname']}, ${metadata['vorname']}');
-    _trySetField(form, 'Straße', metadata['strasse']);
-    _trySetField(form, 'Postleitzahl', metadata['plz']);
-    _trySetField(form, 'Ort', metadata['ort']);
-    _trySetField(form, 'Telefon', metadata['telefon']);
+    try {
+      final form = doc.form;
+      _trySetField(form, 'Name, Vorname', '${metadata['familienname']}, ${metadata['vorname']}');
+      _trySetField(form, 'Straße', metadata['strasse']);
+      _trySetField(form, 'Postleitzahl', metadata['plz']);
+      _trySetField(form, 'Ort', metadata['ort']);
+      _trySetField(form, 'Telefon', metadata['telefon']);
+    } catch (_) {}
 
     // Freitextbereiche
     final sections = _parseSections(generatedText);
@@ -125,7 +131,7 @@ class FormFillerService {
       );
     }
 
-    form.flattenAllFields();
+    try { doc.form.flattenAllFields(); } catch (_) {}
     final bytes = Uint8List.fromList(await doc.save());
     doc.dispose();
     return bytes;

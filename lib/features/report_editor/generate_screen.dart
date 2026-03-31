@@ -216,7 +216,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         actions: [
           if (_step == GenerateStep.result)
             FilledButton.icon(
-              onPressed: () => context.go('/export'),
+              onPressed: () => context.push('/export'),
               icon: const Icon(Icons.picture_as_pdf),
               label: const Text('PDF exportieren'),
             ),
@@ -605,7 +605,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               label: const Text('Als TXT'),
             ),
             FilledButton.icon(
-              onPressed: () => context.go('/export'),
+              onPressed: () => context.push('/export'),
               icon: const Icon(Icons.picture_as_pdf, size: 18),
               label: const Text('Als PDF'),
             ),

@@ -36,7 +36,7 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/editor'),
+            onPressed: () => context.pop(),
           ),
           title: const Text('Export'),
         ),
@@ -49,7 +49,7 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
               const Text('Kein generierter Bericht vorhanden.'),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: () => context.go('/editor'),
+                onPressed: () => context.pop(),
                 child: const Text('Zurück zum Editor'),
               ),
             ],
@@ -62,7 +62,7 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/editor'),
+          onPressed: () => context.pop(),
         ),
         title: const Text('Bericht exportieren'),
       ),
