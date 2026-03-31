@@ -35,10 +35,12 @@ dependencies:
   # File Picker + Drag & Drop
   file_picker: ^8.1.7
   desktop_drop: ^0.5.0
+  signature: ^5.5.0
   cross_file: ^0.3.5+2
 
   # Utilities
   uuid: ^4.5.1
+  crypto: ^3.0.7
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

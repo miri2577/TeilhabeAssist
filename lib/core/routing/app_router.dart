@@ -6,6 +6,7 @@ import 'package:teilhabe_assist/features/onboarding/onboarding_screen.dart';
 import 'package:teilhabe_assist/features/pseudonymization/ui/pseudonym_preview_screen.dart';
 import 'package:teilhabe_assist/features/report_editor/generate_screen.dart';
 import 'package:teilhabe_assist/features/report_editor/report_editor_screen.dart';
+import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/settings/dictionary_screen.dart';
 import 'package:teilhabe_assist/features/settings/settings_screen.dart';
 
@@ -50,6 +51,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/dictionary',
       builder: (context, state) => const DictionaryScreen(),
+    ),
+    GoRoute(
+      path: '/privacy',
+      builder: (context, state) => const PrivacySignatureScreen(),
     ),
   ],
 );

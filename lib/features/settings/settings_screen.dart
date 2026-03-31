@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/storage/data_reset_service.dart';
 import '../../core/storage/settings_storage.dart';
 import '../../core/theme/app_settings_provider.dart';
 import '../api/providers/api_providers.dart';
@@ -359,8 +360,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 24),
 
+              // === DATENSCHUTZ ===
+              _sectionTitle('Datenschutz & Recht', theme),
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.policy_outlined),
+                      title: const Text('Datenschutzerklärung & Unterschrift'),
+                      subtitle: const Text(
+                          'Datenschutzerklärung lesen und rechtssicher unterzeichnen'),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () => context.go('/privacy'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
               // === INFO ===
-              _sectionTitle('Info', theme),
+              _sectionTitle('Info & Daten', theme),
               Card(
                 child: Column(
                   children: [
@@ -368,6 +388,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       leading: const Icon(Icons.info_outline),
                       title: const Text('Über TeilhabeAssist'),
                       onTap: () => _showAbout(context, theme),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: Icon(Icons.delete_forever,
+                          color: Colors.red.shade700),
+                      title: Text('Alle App-Daten löschen',
+                          style: TextStyle(color: Colors.red.shade700)),
+                      subtitle: const Text(
+                          'API-Keys, Wörterbücher, Unterschriften, Vorlagen – alles'),
+                      onTap: () => _confirmDeleteAll(context),
                     ),
                   ],
                 ),
@@ -401,6 +431,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _confirmDeleteAll(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.warning, color: Colors.red.shade700, size: 48),
+        title: const Text('Alle Daten löschen?'),
+        content: const Text(
+          'Dies löscht unwiderruflich:\n\n'
+          '• Alle API-Keys\n'
+          '• Alle Wörterbücher (ausgeschlossene Wörter, gelernte Namen)\n'
+          '• Alle gespeicherten Vorlagen\n'
+          '• Die Datenschutz-Unterschrift\n'
+          '• Alle Einstellungen\n\n'
+          'Die App wird danach neu gestartet.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await DataResetService.resetAll();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Alle Daten gelöscht. Bitte App neu starten.')),
+              );
+            },
+            child: const Text('Endgültig löschen'),
+          ),
+        ],
       ),
     );
   }

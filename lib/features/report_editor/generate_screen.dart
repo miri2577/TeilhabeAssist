@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../api/models/report_request.dart';
 import '../api/providers/api_providers.dart';
+import '../privacy/privacy_policy_text.dart';
+import '../privacy/privacy_signature_screen.dart';
 import '../pseudonymization/engine/brp_page4_detector.dart';
 import '../pseudonymization/engine/pseudonym_engine.dart';
 import '../pseudonymization/models/pseudonym_result.dart';
@@ -64,6 +66,15 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       _page4Warnings.any((w) => w.severity == BrpPage4Severity.blocked);
 
   Future<void> _generate() async {
+    // Signatur-Check: Datenschutzerklärung muss unterzeichnet sein
+    final sigStore = ref.read(signatureStoreProvider);
+    if (!sigStore.isSignatureValid(kPrivacyPolicyText)) {
+      setState(() => _error =
+          'Bitte zuerst die Datenschutzerklärung unterzeichnen '
+          '(Einstellungen → Datenschutz & Recht).');
+      return;
+    }
+
     final apiKey = ref.read(activeApiKeyProvider);
     if (apiKey.isEmpty) {
       setState(() => _error = 'Bitte zuerst einen API-Key in den Einstellungen hinterlegen.');

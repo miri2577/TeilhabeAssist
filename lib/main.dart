@@ -5,6 +5,8 @@ import 'package:teilhabe_assist/app.dart';
 import 'package:teilhabe_assist/core/storage/settings_storage.dart';
 import 'package:teilhabe_assist/core/theme/app_settings_provider.dart';
 import 'package:teilhabe_assist/features/api/providers/api_providers.dart';
+import 'package:teilhabe_assist/features/privacy/signature_store.dart';
+import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/pseudonymization/engine/user_dictionary.dart';
 import 'package:teilhabe_assist/features/pseudonymization/providers/pseudonym_providers.dart';
 
@@ -17,6 +19,9 @@ void main() async {
 
   final userDictionary = UserDictionary();
   await userDictionary.init();
+
+  final signatureStore = SignatureStore();
+  await signatureStore.init();
 
   final appSettingsNotifier = AppSettingsNotifier();
   await appSettingsNotifier.init();
@@ -37,6 +42,7 @@ void main() async {
             ),
           ),
         userDictionaryProvider.overrideWithValue(userDictionary),
+        signatureStoreProvider.overrideWithValue(signatureStore),
         appSettingsProvider.overrideWith((ref) => appSettingsNotifier),
       ],
       child: const TeilhabeAssistApp(),
