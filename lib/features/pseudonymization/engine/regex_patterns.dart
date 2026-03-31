@@ -43,9 +43,9 @@ class RegexPatterns {
     caseSensitive: false,
   );
 
-  /// Anrede + Name: "Herr Müller", "Frau Dr. Schmidt"
+  /// Anrede + Name: "Herr Müller", "Herrn Dode", "Frau Dr. Schmidt"
   static final anredeName = RegExp(
-    r'\b(?:Herr|Frau|Hr\.|Fr\.)\s+'
+    r'\b(?:Herrn?|Frau|Hr\.|Fr\.)\s+'
     r'(?:(?:Dr\.|Prof\.|Dipl\.\-?\w+\.?)\s+)?'
     r'[A-ZÄÖÜ][a-zäöüß]+(?:\s+[A-ZÄÖÜ][a-zäöüß]+)?',
   );

@@ -28,7 +28,7 @@ class NameRecognizer {
   Set<String> _excludedWords = {};
 
   static final _anredePattern = RegExp(
-    r'\b(?:Herr|Frau|Hr\.|Fr\.)\s+'
+    r'\b(?:Herrn?|Frau|Hr\.|Fr\.)\s+'
     r'(?:(?:Dr\.|Prof\.|Dipl\.\-?\w+\.?)\s+)?'
     r'([A-ZÄÖÜ][a-zäöüß]+(?:[\s\-][A-ZÄÖÜ][a-zäöüß]+)*)',
   );

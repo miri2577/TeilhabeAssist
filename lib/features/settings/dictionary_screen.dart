@@ -53,16 +53,23 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
         children: [
           _buildWordList(
             dictionary.excludedWordsList,
-            'Wörter die NICHT als Namen erkannt werden',
-            'Neues Wort ausschließen',
+            'Wörter die NICHT als Namen erkannt werden sollen.\n'
+            'Wenn die Pseudonymisierung ein normales Wort fälschlich als '
+            'Name markiert (z.B. "Rose", "Werkstatt"), trage es hier ein. '
+            'Es wird dann nie mehr als Name erkannt.',
+            'Wort eingeben das kein Name ist...',
             (word) => dictionary.excludeWord(word),
             (word) => dictionary.removeExcludedWord(word),
             theme,
           ),
           _buildWordList(
             dictionary.learnedNamesList,
-            'Wörter die IMMER als Namen erkannt werden',
-            'Neuen Namen hinzufügen',
+            'Namen die IMMER pseudonymisiert werden sollen.\n'
+            'Wenn ein Name im Text nicht automatisch erkannt wird '
+            '(z.B. ein seltener Vorname wie "Dode" oder "Zygmunt"), '
+            'trage ihn hier ein. Er wird dann in jedem Bericht '
+            'automatisch durch einen Platzhalter ersetzt.',
+            'Name eingeben der erkannt werden soll...',
             (word) => dictionary.learnName(word),
             (word) => dictionary.removeLearnedName(word),
             theme,

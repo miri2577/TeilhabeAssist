@@ -336,13 +336,13 @@ class _PseudonymPreviewScreenState
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('"${mapping.original}" ins Wörterbuch aufgenommen – wird nicht mehr erkannt'),
+                    content: Text('"${mapping.original}" wird ab jetzt NICHT mehr als Name erkannt'),
                   ),
                 );
               }
             },
             icon: const Icon(Icons.block, size: 18),
-            label: const Text('Kein Name (merken)'),
+            label: const Text('Kein Name – nie mehr erkennen'),
           ),
           // Nur diesmal entfernen
           TextButton(
@@ -366,7 +366,7 @@ class _PseudonymPreviewScreenState
               );
             },
             icon: const Icon(Icons.check, size: 18),
-            label: const Text('Ist ein Name (merken)'),
+            label: const Text('Ist ein Name – immer erkennen'),
           ),
         ],
       ),
