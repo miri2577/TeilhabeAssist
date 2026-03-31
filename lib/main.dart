@@ -5,6 +5,7 @@ import 'package:teilhabe_assist/app.dart';
 import 'package:teilhabe_assist/core/storage/settings_storage.dart';
 import 'package:teilhabe_assist/core/theme/app_settings_provider.dart';
 import 'package:teilhabe_assist/features/api/providers/api_providers.dart';
+import 'package:teilhabe_assist/features/auth/auth_service.dart';
 import 'package:teilhabe_assist/features/privacy/signature_store.dart';
 import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/pseudonymization/engine/user_dictionary.dart';
@@ -22,6 +23,9 @@ void main() async {
 
   final signatureStore = SignatureStore();
   await signatureStore.init();
+
+  final authService = AuthService();
+  await authService.init();
 
   final appSettingsNotifier = AppSettingsNotifier();
   await appSettingsNotifier.init();
@@ -42,6 +46,7 @@ void main() async {
             ),
           ),
         userDictionaryProvider.overrideWithValue(userDictionary),
+        authServiceProvider.overrideWithValue(authService),
         signatureStoreProvider.overrideWithValue(signatureStore),
         appSettingsProvider.overrideWith((ref) => appSettingsNotifier),
       ],
