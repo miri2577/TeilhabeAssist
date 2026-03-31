@@ -1,7 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/storage/audit_log.dart';
 import '../adapters/anthropic_adapter.dart';
 import '../adapters/llm_adapter.dart';
 import '../adapters/openai_adapter.dart';
+
+final auditLogProvider = Provider<AuditLog>((ref) => AuditLog());
 
 enum LLMProvider {
   anthropic('Anthropic Claude'),

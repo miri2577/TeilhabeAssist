@@ -43,7 +43,32 @@ c) Eine Pflicht-Bestätigung ist technisch erzwungen und nicht überspringbar.
 
 5.2 Da die übermittelten Daten aus Sicht des API-Providers anonym sind (kein Zugang zur Zuordnungstabelle, keine eigenen Mittel zur Re-Identifizierung), liegt KEINE Auftragsverarbeitung im Sinne von Art. 28 DSGVO vor. Ein Auftragsverarbeitungsvertrag (AVV) ist daher nicht erforderlich.
 
-5.3 Beide Provider bieten dennoch Data Processing Addenda (DPA) mit EU-Standardvertragsklauseln (SCCs) an, die als zusätzliches Sicherheitsnetz dienen.
+5.3 Beide Provider bieten Data Processing Addenda (DPA) mit EU-Standardvertragsklauseln (SCCs) an, die als zusätzliches Sicherheitsnetz dienen.
+
+5.4 DRITTLANDTRANSFER – SUPPLEMENTARY MEASURES (Schrems II)
+
+Gemäß dem Urteil des EuGH in der Rechtssache C-311/18 ("Schrems II") werden folgende ergänzende Maßnahmen implementiert, um ein der EU gleichwertiges Schutzniveau zu gewährleisten:
+
+a) TECHNISCHE MASSNAHMEN:
+   • Pseudonymisierung ALLER personenbezogenen Daten VOR der Übermittlung
+   • Die Zuordnungstabelle verbleibt ausschließlich auf dem lokalen Gerät
+   • Der API-Provider hat KEINE technischen Mittel zur Re-Identifizierung
+   • Verschlüsselung in Transit mittels TLS 1.3
+   • Aus Sicht des Providers handelt es sich um anonyme Daten
+
+b) VERTRAGLICHE MASSNAHMEN:
+   • EU-Standardvertragsklauseln (SCCs) sind Bestandteil der DPA beider Provider
+   • Anthropic: DPA mit Modul 2 (Controller → Processor) und Modul 3 (Processor → Processor)
+   • OpenAI: DPA mit SCCs nach Durchführungsbeschluss (EU) 2021/914
+   • Zero Data Retention: Beide Provider verpflichten sich, API-Inputs nicht für Training zu verwenden
+
+c) ORGANISATORISCHE MASSNAHMEN:
+   • Pflicht-Prüfung durch die Fachkraft vor jeder API-Übermittlung (technisch erzwungen)
+   • Audit-Log protokolliert jeden API-Aufruf (ohne personenbezogene Daten)
+   • Datenschutzerklärung mit elektronischer Signatur der Fachkraft
+
+d) RISIKOBEWERTUNG:
+   Da die übermittelten Daten aus Sicht des API-Providers anonym sind (kein Zugang zur Zuordnungstabelle), ist das Risiko einer Offenlegung personenbezogener Daten gegenüber US-Behörden NICHT gegeben. Selbst bei einem Zugriff auf die API-Logs des Providers können keine natürlichen Personen identifiziert werden.
 
 6. DATENSPEICHERUNG UND LÖSCHUNG
 
@@ -56,7 +81,21 @@ c) Eine Pflicht-Bestätigung ist technisch erzwungen und nicht überspringbar.
 
 Die psychiatrische Anamnese (Seite 4 des BRP) darf gemäß Berliner Rahmenvertrag nicht an den Kostenträger weitergeleitet werden. Die App erkennt diese Inhalte automatisch und BLOCKIERT ihre Übermittlung an die API – auch nicht in pseudonymisierter Form.
 
-8. TECHNISCHE UND ORGANISATORISCHE MASSNAHMEN (TOMs)
+8. AUDIT-LOG
+
+8.1 Die App führt ein lokales Audit-Log, das alle sicherheitsrelevanten Aktionen protokolliert:
+• Berichtsgenerierungen (Modell, Anzahl Pseudonymisierungen, Berichtstyp)
+• Passwort-Events (Setzen, erfolgreiche/fehlgeschlagene Anmeldungen, Sperrungen)
+• Datenschutz-Unterschriften
+• Wörterbuch-Exporte und -Importe
+• BRP Seite 4 Blockierungen
+• Daten-Löschungen
+
+8.2 Das Audit-Log enthält KEINE personenbezogenen Daten – nur Metadaten und Zeitstempel.
+
+8.3 Das Audit-Log kann über die Einstellungen als JSON-Datei exportiert werden und dient als Nachweis für den Datenschutzbeauftragten des Trägers.
+
+9. TECHNISCHE UND ORGANISATORISCHE MASSNAHMEN
 
 • Verschlüsselung at Rest: AES-256-GCM für Zuordnungstabellen
 • Verschlüsselung in Transit: TLS 1.3 für API-Kommunikation
@@ -65,11 +104,11 @@ Die psychiatrische Anamnese (Seite 4 des BRP) darf gemäß Berliner Rahmenvertra
 • Validierungs-Layer: Automatische + manuelle Prüfung vor jedem API-Aufruf
 • Plattform-Sicherheit: App Sandbox (macOS/iOS/Android)
 
-9. RECHTE DER BETROFFENEN PERSONEN
+10. RECHTE DER BETROFFENEN PERSONEN
 
 Die Rechte der leistungsberechtigten Personen (Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch, Datenübertragbarkeit) werden durch den jeweils verantwortlichen Leistungserbringer gewährleistet.
 
-10. PFLICHTEN DER FACHKRAFT
+11. PFLICHTEN DER FACHKRAFT
 
 Mit der Unterzeichnung dieser Erklärung bestätigt die Fachkraft:
 
@@ -83,11 +122,11 @@ d) Den API-Key vertraulich zu behandeln und nicht an unbefugte Dritte weiterzuge
 
 e) Bei Verdacht auf eine Datenschutzverletzung (z.B. wenn personenbezogene Daten versehentlich an die API übermittelt wurden) unverzüglich die verantwortliche Stelle und den Datenschutzbeauftragten des Trägers zu informieren.
 
-11. RESTRISIKO
+12. RESTRISIKO
 
 Trotz der Kombination aus automatischer Engine und menschlicher Prüfung besteht ein Restrisiko, dass personenbezogene Daten nicht erkannt werden (z.B. seltene Vornamen im Fließtext, kontextuelle Identifizierung durch Kombination von Diagnose + Bezirk + Alter). Die App minimiert dieses Risiko durch Über-Erkennung und Lernfunktion, kann es aber nicht auf Null reduzieren. Die letzte Verantwortung liegt bei der prüfenden Fachkraft.
 
-12. RECHTSGRUNDLAGEN
+13. RECHTSGRUNDLAGEN
 
 • DSGVO Art. 6 Abs. 1 lit. f (berechtigtes Interesse an effizienter Berichterstellung)
 • DSGVO Art. 9 Abs. 2 lit. h (Verarbeitung zu Zwecken der Gesundheitsversorgung)

@@ -374,6 +374,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () => context.go('/privacy'),
                     ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.receipt_long_outlined),
+                      title: const Text('Audit-Log exportieren'),
+                      subtitle: const Text(
+                          'Protokoll aller sicherheitsrelevanten Aktionen'),
+                      onTap: _exportAuditLog,
+                    ),
                   ],
                 ),
               ),
@@ -433,6 +441,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _exportAuditLog() async {
+    final auditLog = ref.read(auditLogProvider);
+    final json = auditLog.exportToJson();
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Audit-Log exportieren',
+      fileName: 'teilhabe_audit_${DateTime.now().toIso8601String().substring(0, 10)}.json',
+    );
+    if (path == null) return;
+    await File(path).writeAsString(json);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Audit-Log exportiert (${auditLog.entryCount} Einträge)')),
+      );
+    }
   }
 
   void _confirmDeleteAll(BuildContext context) {

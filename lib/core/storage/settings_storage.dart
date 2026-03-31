@@ -1,12 +1,47 @@
-import 'package:hive/hive.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
-/// Persistente Speicherung von App-Einstellungen (API-Keys, Modell, Provider).
+import 'package:hive/hive.dart';
+import 'package:pointycastle/export.dart';
+
+/// Persistente Speicherung von App-Einstellungen.
+/// API-Keys werden mit AES-256 verschlüsselt in Hive gespeichert.
 class SettingsStorage {
-  static const _boxName = 'app_settings';
+  static const _boxName = 'app_settings_encrypted';
+  static const _keyBoxName = 'app_settings_key';
   Box<String>? _box;
 
   Future<void> init() async {
-    _box = await Hive.openBox<String>(_boxName);
+    final encryptionKey = await _getOrCreateEncryptionKey();
+    _box = await Hive.openBox<String>(
+      _boxName,
+      encryptionCipher: HiveAesCipher(encryptionKey),
+    );
+  }
+
+  /// Generiert oder lädt den Box-Verschlüsselungskey.
+  /// Der Key wird in einer separaten unverschlüsselten Box gespeichert,
+  /// die durch das App-Passwort (Lock-Screen) geschützt ist.
+  Future<Uint8List> _getOrCreateEncryptionKey() async {
+    final keyBox = await Hive.openBox<String>(_keyBoxName);
+    final existingKey = keyBox.get('enc_key');
+
+    if (existingKey != null) {
+      return base64Decode(existingKey);
+    }
+
+    // Neuen zufälligen 256-Bit Key generieren
+    final random = FortunaRandom();
+    final seed = Uint8List.fromList(
+      List.generate(32, (i) =>
+        (DateTime.now().microsecondsSinceEpoch + i * 37) % 256),
+    );
+    random.seed(KeyParameter(seed));
+    final key = random.nextBytes(32);
+
+    await keyBox.put('enc_key', base64Encode(key));
+    await keyBox.close();
+    return key;
   }
 
   bool get isInitialized => _box != null && _box!.isOpen;

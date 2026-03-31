@@ -92,14 +92,38 @@ class SecureStorage {
   }
 
   /// PBKDF2-Schlüsselableitung: Passphrase → 32 Byte AES-Key
+  /// Salt wird zufällig generiert und in Hive persistiert (pro Installation eindeutig).
   Uint8List _deriveKey(String passphrase) {
-    final salt = utf8.encode('TeilhabeAssist_v1');
+    final salt = _getOrCreateSalt();
     final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64));
     pbkdf2.init(Pbkdf2Parameters(
-      Uint8List.fromList(salt),
+      salt,
       100000, // 100.000 Iterationen
       32, // 256 Bit
     ));
     return pbkdf2.process(Uint8List.fromList(utf8.encode(passphrase)));
+  }
+
+  /// Gibt den persistierten Salt zurück oder generiert einen neuen.
+  Uint8List _getOrCreateSalt() {
+    // Salt in unverschlüsselter Box speichern (ist kein Geheimnis,
+    // dient nur der Eindeutigkeit pro Installation)
+    final saltBox = Hive.box<String>('app_settings_key');
+    final existingSalt = saltBox.get('pbkdf2_salt');
+
+    if (existingSalt != null) {
+      return base64Decode(existingSalt);
+    }
+
+    final random = FortunaRandom();
+    final seed = Uint8List.fromList(
+      List.generate(32, (i) =>
+        (DateTime.now().microsecondsSinceEpoch + i * 41) % 256),
+    );
+    random.seed(KeyParameter(seed));
+    final salt = random.nextBytes(32);
+
+    saltBox.put('pbkdf2_salt', base64Encode(salt));
+    return salt;
   }
 }

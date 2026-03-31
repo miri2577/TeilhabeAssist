@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/storage/audit_log.dart';
 import '../api/models/report_request.dart';
 import '../api/providers/api_providers.dart';
 import '../privacy/privacy_policy_text.dart';
@@ -158,6 +159,14 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       }
 
       ref.read(reportDraftNotifierProvider.notifier).setGeneratedText(finalText);
+
+      // Audit-Log: Berichtsgenerierung protokollieren
+      ref.read(auditLogProvider).log(AuditEvent.reportGenerated(
+        mappingCount: (_pseudonymResult?.totalReplacements ?? 0) +
+            (_previousReportResult?.totalReplacements ?? 0),
+        model: ref.read(selectedModelProvider),
+        reportType: currentDraft.type.name,
+      ));
 
       final draft = ref.read(reportDraftNotifierProvider);
       _qualityIssues = QualityChecker.checkGeneratedText(
