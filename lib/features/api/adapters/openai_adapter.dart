@@ -62,6 +62,7 @@ class OpenAIAdapter implements LLMAdapter {
       data: {
         ..._buildRequestBody(request),
         'stream': true,
+        'stream_options': {'include_usage': true},
       },
     );
 

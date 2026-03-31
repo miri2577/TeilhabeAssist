@@ -69,12 +69,18 @@ class AuditEvent {
     required int mappingCount,
     required String model,
     required String reportType,
+    int? inputTokens,
+    int? outputTokens,
+    double? costUsd,
   }) => AuditEvent(
     action: 'report_generated',
     details: {
       'mappingCount': mappingCount,
       'model': model,
       'reportType': reportType,
+      if (inputTokens != null) 'inputTokens': inputTokens,
+      if (outputTokens != null) 'outputTokens': outputTokens,
+      if (costUsd != null) 'costUsd': costUsd,
     },
   );
 

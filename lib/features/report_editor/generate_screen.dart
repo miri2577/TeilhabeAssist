@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -37,14 +36,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   bool _confirmed = false;
   String _generatedText = '';
   bool _isStreaming = false;
+  ReportResponse? _usageData;
   String? _error;
   List<BrpPage4Warning> _page4Warnings = [];
   List<QualityIssue> _qualityIssues = [];
-  StreamSubscription<String>? _streamSubscription;
 
   @override
   void dispose() {
-    _streamSubscription?.cancel();
     super.dispose();
   }
 
@@ -128,26 +126,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         pseudonymizedPreviousReport: _pseudonymizedPreviousReport,
       );
 
-      // F2: Streaming mit cancelbarer Subscription
-      final completer = Completer<void>();
-      _streamSubscription = adapter.generateReportStream(request).listen(
-        (chunk) {
-          if (!mounted) {
-            _streamSubscription?.cancel();
-            return;
-          }
-          setState(() => _generatedText += chunk);
-        },
-        onError: (e) {
-          if (!completer.isCompleted) completer.completeError(e);
-        },
-        onDone: () {
-          if (!completer.isCompleted) completer.complete();
-        },
-      );
-      await completer.future;
+      // Non-Streaming Aufruf – liefert echte Token-Usage-Daten
+      final response = await adapter.generateReport(request);
 
       if (!mounted) return;
+
+      _generatedText = response.text;
+      _usageData = response;
 
       // Rekonstruktion: Platzhalter durch Originaldaten ersetzen
       // Nutzt die EINE Engine die ALLE Mappings kennt
@@ -167,11 +152,14 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
 
       ref.read(reportDraftNotifierProvider.notifier).setGeneratedText(finalText);
 
-      // Audit-Log: Berichtsgenerierung protokollieren
+      // Audit-Log: Berichtsgenerierung mit echten Kosten protokollieren
       ref.read(auditLogProvider).log(AuditEvent.reportGenerated(
         mappingCount: _pseudonymResult?.totalReplacements ?? 0,
-        model: ref.read(selectedModelProvider),
+        model: response.model,
         reportType: currentDraft.type.name,
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+        costUsd: response.costUsd,
       ));
 
       final draft = ref.read(reportDraftNotifierProvider);
@@ -514,8 +502,10 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           children: [
             Icon(Icons.check_circle, color: Colors.green.shade700),
             const SizedBox(width: 8),
-            Text('Bericht erfolgreich generiert',
-                style: theme.textTheme.titleMedium),
+            Expanded(
+              child: Text('Bericht erfolgreich generiert',
+                  style: theme.textTheme.titleMedium),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -526,6 +516,46 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        // Token-Kosten-Anzeige (echte Werte aus der API)
+        if (_usageData != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.analytics_outlined,
+                    color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'API-Verbrauch: ${_usageData!.tokenDisplay}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Modell: ${_usageData!.model} · '
+                        'Kosten: ${_usageData!.costDisplay}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (_qualityIssues.isNotEmpty) ...[
           const SizedBox(height: 12),
           QualityPanel(issues: _qualityIssues),
