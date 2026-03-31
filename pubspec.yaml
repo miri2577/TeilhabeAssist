@@ -52,3 +52,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/templates/informationsbericht_101.pdf
+    - assets/templates/mdb-ges_100_11_v12sp.pdf
