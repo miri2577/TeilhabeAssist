@@ -151,16 +151,15 @@ void main() {
       expect(result.cleanText, contains('Schule'));
     });
 
-    test('markiert unbekannte Großbuchstaben-Wörter als Verdacht', () {
+    test('erkennt unbekannte Namen über Lernfunktion', () {
+      // Low-confidence Heuristik ist deaktiviert (zu viele False Positives
+      // bei deutschem Fachtext). Stattdessen: Lernfunktion.
+      engine.learnName('Zygmunt');
       final result = engine.pseudonymize(
         'Der Klient besucht regelmäßig Zygmunt im Verein.',
       );
-      // "Zygmunt" ist nicht im Wörterbuch → niedrige Konfidenz / Warning
       expect(
-        result.warnings.any((w) => w.contains('Zygmunt')) ||
-            result.mappings.any((m) =>
-                m.original == 'Zygmunt' &&
-                m.confidence == ConfidenceLevel.low),
+        result.mappings.any((m) => m.original == 'Zygmunt'),
         isTrue,
       );
     });

@@ -348,26 +348,37 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           const SizedBox(height: 16),
         ],
 
-        // Pseudonymisierungs-Warnings
+        // Pseudonymisierungs-Warnings (scrollbar, max 120px)
         if (_pseudonymResult!.warnings.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Bitte prüfen:',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade700)),
-                const SizedBox(height: 8),
-                ..._pseudonymResult!.warnings.map(
-                  (w) => Text('• $w', style: theme.textTheme.bodySmall),
-                ),
-              ],
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 120),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Bitte prüfen (${_pseudonymResult!.warningCount}):',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade700)),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _pseudonymResult!.warnings.map(
+                          (w) => Text('• $w', style: theme.textTheme.bodySmall),
+                        ).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),

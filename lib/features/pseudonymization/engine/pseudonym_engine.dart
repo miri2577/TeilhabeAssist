@@ -169,14 +169,8 @@ class PseudonymEngine {
       );
     }
 
-    // Prüfe auf Wörter die nach Eigennamen aussehen
-    final namePattern = RegExp(r'(?<=[a-zäöüß]\s)[A-ZÄÖÜ][a-zäöüß]{2,}');
-    for (final match in namePattern.allMatches(cleanText)) {
-      final word = match.group(0)!;
-      if (!_commonWordsLower.contains(word.toLowerCase())) {
-        issues.add('Möglicher Eigenname: "$word" – bitte manuell prüfen');
-      }
-    }
+    // Namens-Heuristik deaktiviert – produziert bei deutschem Fachtext
+    // zu viele False Positives. Stattdessen: Wörterbuch + Lernfunktion.
 
     return issues;
   }

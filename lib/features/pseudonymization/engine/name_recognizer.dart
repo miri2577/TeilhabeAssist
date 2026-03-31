@@ -107,33 +107,12 @@ class NameRecognizer {
       }
     }
 
-    // 4. Niedrige Konfidenz: Nur Wörter die wie Namen aussehen
-    //    Im Deutschen sind ALLE Substantive großgeschrieben. Deshalb
-    //    filtern wir mit Heuristiken statt alles zu markieren:
-    //    - Nur kurze Wörter (3–12 Zeichen, typische Namenlänge)
-    //    - Keine deutschen Substantiv-Suffixe (-ung, -keit, -heit, -tion, etc.)
-    //    - Keine Komposita (>12 Zeichen sind fast immer Substantive)
-    final suspiciousPattern = RegExp(
-      r'(?<=[a-zäöüß,;:]\s)([A-ZÄÖÜ][a-zäöüß]{2,11})',
-    );
-    for (final match in suspiciousPattern.allMatches(text)) {
-      final word = match.group(1)!;
-      if (isOverlapping(match.start, match.end)) continue;
-
-      final wordLower = word.toLowerCase();
-      if (_commonWordsLower.contains(wordLower)) continue;
-      if (_excludedWords.contains(wordLower)) continue;
-      if (_firstNamesLower.contains(wordLower)) continue;
-      if (_learnedNames.contains(wordLower)) continue;
-      if (_looksLikeGermanNoun(wordLower)) continue;
-
-      addMatch(NameMatch(
-        text: word,
-        start: match.start + match.group(0)!.indexOf(word),
-        end: match.start + match.group(0)!.indexOf(word) + word.length,
-        confidence: ConfidenceLevel.low,
-      ));
-    }
+    // 4. Niedrige Konfidenz: DEAKTIVIERT
+    //    Im Deutschen sind ALLE Substantive großgeschrieben.
+    //    Die Heuristik produziert bei Fachtext (Eingliederungshilfe)
+    //    fast nur False Positives. Schritte 1-3 (Anrede, Wörterbuch,
+    //    gelernte Namen) sind ausreichend für die Erkennung.
+    //    Unbekannte Namen werden über die Lernfunktion ergänzt.
 
     matches.sort((a, b) => a.start.compareTo(b.start));
     return matches;
