@@ -58,14 +58,29 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   String? _pseudonymizedNotes;
   String? _pseudonymizedPreviousReport;
 
+  int _page4RemovedSections = 0;
+
   void _runPseudonymization() {
     final draft = ref.read(reportDraftNotifierProvider);
     if (draft == null) return;
 
-    // BRP Seite-4-Schutz
+    var notesText = draft.allNotesAsText;
+    var previousReport = draft.previousReport;
+
+    // BRP Seite-4-Schutz: erkannte Abschnitte automatisch entfernen
     if (draft.type == ReportType.brp) {
-      final allText = '${draft.allNotesAsText}\n${draft.previousReport}';
+      final allText = '$notesText\n$previousReport';
       _page4Warnings = BrpPage4Detector.detect(allText);
+
+      if (_page4Warnings.isNotEmpty) {
+        // Seite-4-Inhalte aus beiden Texten entfernen
+        final cleanedNotes = BrpPage4Detector.removePage4Content(notesText);
+        final cleanedPrev = BrpPage4Detector.removePage4Content(previousReport);
+        notesText = cleanedNotes.cleanText;
+        previousReport = cleanedPrev.cleanText;
+        _page4RemovedSections =
+            cleanedNotes.removedSections + cleanedPrev.removedSections;
+      }
     }
 
     // EINE Engine für alle Texte → eindeutige Platzhalter-Nummern
@@ -74,20 +89,18 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     _engine!.loadUserDictionary(dictionary);
 
     // Vorbericht ZUERST pseudonymisieren (gleiche Namen bekommen gleiche Platzhalter)
-    if (draft.previousReport.isNotEmpty) {
-      final prevResult = _engine!.pseudonymize(draft.previousReport);
+    if (previousReport.isNotEmpty) {
+      final prevResult = _engine!.pseudonymize(previousReport);
       _pseudonymizedPreviousReport = prevResult.cleanText;
     }
 
     // Dann Notizen – keepMappings: true damit gleiche Namen gleiche Platzhalter bekommen
-    _pseudonymResult = _engine!.pseudonymize(draft.allNotesAsText, keepMappings: true);
+    _pseudonymResult = _engine!.pseudonymize(notesText, keepMappings: true);
     _pseudonymizedNotes = _pseudonymResult!.cleanText;
 
     setState(() => _step = GenerateStep.review);
   }
 
-  bool get _isBlocked =>
-      _page4Warnings.any((w) => w.severity == BrpPage4Severity.blocked);
 
   Future<void> _generate() async {
     // Signatur-Check: Datenschutzerklärung muss unterzeichnet sein
@@ -291,18 +304,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         ),
         const SizedBox(height: 16),
 
-        // BRP Seite-4-Blockierung
+        // BRP Seite-4-Info (automatisch entfernt)
         if (_page4Warnings.isNotEmpty) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _isBlocked
-                  ? Colors.red.withValues(alpha: 0.12)
-                  : Colors.orange.withValues(alpha: 0.08),
-              border: Border.all(
-                color: _isBlocked ? Colors.red : Colors.orange,
-                width: _isBlocked ? 2 : 1,
-              ),
+              color: Colors.blue.withValues(alpha: 0.08),
+              border: Border.all(color: Colors.blue, width: 1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -310,41 +318,30 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      _isBlocked ? Icons.block : Icons.warning_amber,
-                      color: _isBlocked ? Colors.red.shade700 : Colors.orange.shade700,
-                      size: 20,
-                    ),
+                    Icon(Icons.auto_fix_high,
+                        color: Colors.blue.shade700, size: 20),
                     const SizedBox(width: 8),
-                    Text(
-                      _isBlocked
-                          ? 'BRP Seite 4 erkannt – Übermittlung blockiert!'
-                          : 'Mögliche BRP Seite 4 Inhalte:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: _isBlocked ? Colors.red.shade700 : Colors.orange.shade700,
+                    Expanded(
+                      child: Text(
+                        _page4RemovedSections > 0
+                            ? 'BRP Seite 4 erkannt und automatisch entfernt '
+                              '($_page4RemovedSections Abschnitte)'
+                            : 'Mögliche BRP Seite 4 Inhalte erkannt',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                ..._page4Warnings.map(
-                  (w) => Padding(
-                    padding: const EdgeInsets.only(left: 28, bottom: 4),
-                    child: Text('• ${w.message}', style: theme.textTheme.bodySmall),
-                  ),
+                Text(
+                  'Die psychiatrische Anamnese (Seite 4 des BRP) wird nicht '
+                  'an die API übermittelt. Die erkannten Abschnitte wurden '
+                  'automatisch aus dem Text entfernt.',
+                  style: theme.textTheme.bodySmall,
                 ),
-                if (_isBlocked) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Die psychiatrische Anamnese (Seite 4 des BRP) darf nicht '
-                    'an die API übermittelt werden. Bitte entferne diese Inhalte '
-                    'und versuche es erneut.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -431,11 +428,9 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           const SizedBox(height: 12),
         ],
         FilledButton.icon(
-          onPressed: _confirmed && !_isBlocked ? _generate : null,
+          onPressed: _confirmed ? _generate : null,
           icon: const Icon(Icons.auto_awesome),
-          label: Text(_isBlocked
-              ? 'Blockiert – Seite 4 entfernen'
-              : 'Bericht generieren'),
+          label: const Text('Bericht generieren'),
         ),
       ],
     );

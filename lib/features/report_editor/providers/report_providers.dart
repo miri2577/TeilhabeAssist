@@ -46,13 +46,26 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
 
   void updatePreviousReport(String text) {
     if (state == null) return;
-    state!.previousReport = text;
-    state!.updatedAt = DateTime.now();
     state = ReportDraft(
       id: state!.id,
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: text,
+      currentNotes: state!.currentNotes,
+      modules: state!.modules,
+      generatedText: state!.generatedText,
+      pseudonymizedText: state!.pseudonymizedText,
+    );
+  }
+
+  void updateCurrentNotes(String notes) {
+    if (state == null) return;
+    state = ReportDraft(
+      id: state!.id,
+      type: state!.type,
+      createdAt: state!.createdAt,
+      previousReport: state!.previousReport,
+      currentNotes: notes,
       modules: state!.modules,
       generatedText: state!.generatedText,
       pseudonymizedText: state!.pseudonymizedText,
@@ -70,6 +83,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: state!.previousReport,
+      currentNotes: state!.currentNotes,
       modules: modules,
       generatedText: state!.generatedText,
       pseudonymizedText: state!.pseudonymizedText,
@@ -87,6 +101,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: state!.previousReport,
+      currentNotes: state!.currentNotes,
       modules: modules,
       generatedText: state!.generatedText,
       pseudonymizedText: state!.pseudonymizedText,
@@ -101,6 +116,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: state!.previousReport,
+      currentNotes: state!.currentNotes,
       modules: modules,
       generatedText: state!.generatedText,
       pseudonymizedText: state!.pseudonymizedText,
@@ -117,6 +133,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: state!.previousReport,
+      currentNotes: state!.currentNotes,
       modules: modules,
       generatedText: state!.generatedText,
       pseudonymizedText: state!.pseudonymizedText,
@@ -147,6 +164,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       type: state!.type,
       createdAt: state!.createdAt,
       previousReport: state!.previousReport,
+      currentNotes: state!.currentNotes,
       modules: state!.modules,
       generatedText: text,
       pseudonymizedText: state!.pseudonymizedText,

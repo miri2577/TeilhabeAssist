@@ -23,6 +23,10 @@ class ReportDraft {
   /// Module in der Reihenfolge des Berichts
   List<ReportModule> modules;
 
+  /// Aktuelle Stichpunkte/Notizen für den neuen Bericht
+  /// (zentrale Grundlage für die KI-Generierung)
+  String currentNotes;
+
   /// Generierter Berichtstext (nach API-Aufruf)
   String? generatedText;
 
@@ -34,6 +38,7 @@ class ReportDraft {
     required this.type,
     DateTime? createdAt,
     this.previousReport = '',
+    this.currentNotes = '',
     List<ReportModule>? modules,
     this.generatedText,
     this.pseudonymizedText,
@@ -66,9 +71,19 @@ class ReportDraft {
     };
   }
 
-  /// Alle Stichpunkte als zusammenhängenden Text
+  /// Alle Stichpunkte als zusammenhängenden Text für die KI.
+  /// currentNotes (zentrale Stichpunkte) werden prominent vorangestellt.
   String get allNotesAsText {
     final buffer = StringBuffer();
+
+    // Aktuelle Stichpunkte zuerst – das ist der Hauptinput
+    if (currentNotes.trim().isNotEmpty) {
+      buffer.writeln('## Aktuelle Notizen / Veränderungen');
+      buffer.writeln(currentNotes.trim());
+      buffer.writeln();
+    }
+
+    // Dann die Modul-spezifischen Notizen (Kopfdaten, Persondaten etc.)
     for (final module in modules) {
       if (module.notes.trim().isNotEmpty) {
         buffer.writeln('## ${module.title}');

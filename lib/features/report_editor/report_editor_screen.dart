@@ -156,16 +156,9 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   // --- Notizen in Draft übernehmen ---
 
   void _syncNotesToDraft() {
-    final draft = ref.read(reportDraftNotifierProvider);
-    if (draft == null) return;
-    // Notizen in das erste Modul mit Typ allgemeineInfos oder das erste Teilhabeziel schreiben
-    final notesModule = draft.modules.firstWhere(
-      (m) => m.type == ModuleType.allgemeineInfos,
-      orElse: () => draft.modules.first,
-    );
     ref
         .read(reportDraftNotifierProvider.notifier)
-        .updateModuleNotes(notesModule.id, _notesController.text);
+        .updateCurrentNotes(_notesController.text);
   }
 
   // --- BUILD ---

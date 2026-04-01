@@ -104,6 +104,68 @@ class BrpPage4Detector {
   static bool shouldBlock(String text) {
     return detect(text).any((w) => w.severity == BrpPage4Severity.blocked);
   }
+
+  /// Entfernt erkannte Seite-4-Abschnitte aus dem Text.
+  /// Gibt den bereinigten Text und die Anzahl entfernter Abschnitte zurück.
+  static ({String cleanText, int removedSections}) removePage4Content(String text) {
+    final lines = text.split('\n');
+    final cleanLines = <String>[];
+    var inPage4Section = false;
+    var removedSections = 0;
+
+    for (final line in lines) {
+      final lower = line.toLowerCase().trim();
+
+      // Abschnitt beginnt mit Seite-4-Überschrift
+      if (_isPage4SectionStart(lower)) {
+        inPage4Section = true;
+        removedSections++;
+        continue;
+      }
+
+      // Nächster Abschnitt (neue Überschrift) beendet Seite-4-Bereich
+      if (inPage4Section && _isNewSectionStart(line)) {
+        inPage4Section = false;
+      }
+
+      if (!inPage4Section) {
+        cleanLines.add(line);
+      }
+    }
+
+    return (cleanText: cleanLines.join('\n'), removedSections: removedSections);
+  }
+
+  static bool _isPage4SectionStart(String lowerLine) {
+    const starters = [
+      'krankengeschichte',
+      'psychiatrische anamnese',
+      'psychiatrische vorgeschichte',
+      'familienanamnese',
+      'substanzanamnese',
+      'drogenanamnese',
+      'alkoholanamnese',
+      'psychopathologischer befund',
+      'seite 4',
+      'vertraulicher teil',
+    ];
+    for (final s in starters) {
+      if (lowerLine.contains(s)) return true;
+    }
+    return false;
+  }
+
+  static bool _isNewSectionStart(String line) {
+    final trimmed = line.trim();
+    // Markdown-Überschriften oder nummerierte Abschnitte
+    if (trimmed.startsWith('#')) return true;
+    if (RegExp(r'^\d+[\.\)]\s').hasMatch(trimmed)) return true;
+    // Großbuchstaben-Überschriften (z.B. "AKTUELLE LEBENSSITUATION")
+    if (trimmed.length > 5 &&
+        trimmed == trimmed.toUpperCase() &&
+        trimmed.contains(RegExp(r'[A-ZÄÖÜ]'))) return true;
+    return false;
+  }
 }
 
 enum BrpPage4Severity { warning, blocked }
