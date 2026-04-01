@@ -1,8 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:syncfusion_flutter_pdf/src/pdf/implementation/forms/pdf_field.dart';
+import 'package:syncfusion_flutter_pdf/src/pdf/implementation/primitives/pdf_dictionary.dart';
+import 'package:syncfusion_flutter_pdf/src/pdf/implementation/primitives/pdf_name.dart';
+import 'package:syncfusion_flutter_pdf/src/pdf/implementation/primitives/pdf_reference_holder.dart';
+import 'package:syncfusion_flutter_pdf/src/pdf/implementation/primitives/pdf_stream.dart';
 
 class PdfImportService {
   /// Öffnet einen Datei-Dialog und extrahiert Text aus einer PDF-Datei.
@@ -21,8 +27,8 @@ class PdfImportService {
   }
 
   /// Extrahiert relevanten Text aus PDF-Bytes.
-  /// Nutzt pdftotext (poppler) als primäre Methode (bessere Encoding-Unterstützung),
-  /// Syncfusion-Formularfelder als Fallback.
+  /// Nutzt den Appearance-Stream der Formularfelder (plattformübergreifend),
+  /// mit Syncfusion field.text und pdftotext als Fallbacks.
   static Future<PdfImportResult> extractText(
     Uint8List bytes,
     String fileName, {
@@ -30,26 +36,14 @@ class PdfImportService {
   }) async {
     final document = PdfDocument(inputBytes: bytes);
     final pageCount = document.pages.count;
+
+    // Formularfelder von Seite 5-11 extrahieren
+    final formText = _extractFormFieldContents(document);
+
+    // Fallback: Seitentext wenn keine Formularfelder
+    final text = formText.isNotEmpty ? formText : _extractPageText(document);
+
     document.dispose();
-
-    // 1) pdftotext versuchen (liest auch custom Font-Encodings korrekt)
-    final pdftextResult = await _extractWithPdftotext(bytes, filePath,
-        firstPage: 6, lastPage: 11);
-
-    if (pdftextResult.isNotEmpty) {
-      return PdfImportResult(
-        text: pdftextResult.trim(),
-        fileName: fileName,
-        pageCount: pageCount,
-        hasFormFields: true,
-      );
-    }
-
-    // 2) Fallback: Syncfusion Formularfelder
-    final doc2 = PdfDocument(inputBytes: bytes);
-    final formText = _extractFormFieldContents(doc2);
-    final text = formText.isNotEmpty ? formText : _extractPageText(doc2);
-    doc2.dispose();
 
     return PdfImportResult(
       text: text.trim(),
@@ -59,98 +53,9 @@ class PdfImportService {
     );
   }
 
-  /// Extrahiert Text mit pdftotext (poppler).
-  /// Gibt leeren String zurück wenn pdftotext nicht verfügbar ist.
-  static Future<String> _extractWithPdftotext(
-    Uint8List bytes,
-    String? filePath, {
-    int? firstPage,
-    int? lastPage,
-  }) async {
-    try {
-      // Dateipfad ermitteln oder Temp-Datei schreiben
-      String pdfPath;
-      File? tempFile;
-
-      if (filePath != null && await File(filePath).exists()) {
-        pdfPath = filePath;
-      } else {
-        tempFile = File('${Directory.systemTemp.path}/teilhabe_import_${DateTime.now().millisecondsSinceEpoch}.pdf');
-        await tempFile.writeAsBytes(bytes);
-        pdfPath = tempFile.path;
-      }
-
-      try {
-        final args = <String>['-layout'];
-        if (firstPage != null) args.addAll(['-f', '$firstPage']);
-        if (lastPage != null) args.addAll(['-l', '$lastPage']);
-        args.addAll([pdfPath, '-']);
-
-        // Voller Pfad nötig da Flutter-Apps eingeschränkten PATH haben
-        const pdftotextPaths = [
-          '/usr/local/bin/pdftotext',
-          '/opt/homebrew/bin/pdftotext',
-          'pdftotext',
-        ];
-
-        ProcessResult? result;
-        for (final bin in pdftotextPaths) {
-          try {
-            result = await Process.run(bin, args);
-            if (result.exitCode == 0) break;
-          } catch (_) {
-            continue;
-          }
-        }
-        if (result == null) return '';
-
-        if (result.exitCode == 0) {
-          final text = (result.stdout as String).trim();
-          if (text.isNotEmpty) return _cleanPdftotextOutput(text);
-        }
-      } finally {
-        try { await tempFile?.delete(); } catch (_) {}
-      }
-    } catch (_) {
-      // pdftotext nicht installiert oder anderer Fehler
-    }
-    return '';
-  }
-
-  /// Bereinigt pdftotext-Ausgabe: übermäßige Leerzeichen und Formular-Labels entfernen.
-  static String _cleanPdftotextOutput(String raw) {
-    final lines = raw.split('\n');
-    final buffer = StringBuffer();
-    var emptyLineCount = 0;
-
-    for (final line in lines) {
-      final trimmed = line.trimRight();
-
-      // Leere Zeilen begrenzen (max 2 aufeinander)
-      if (trimmed.isEmpty) {
-        emptyLineCount++;
-        if (emptyLineCount <= 2) buffer.writeln();
-        continue;
-      }
-      emptyLineCount = 0;
-
-      // Übermäßige Leerzeichen innerhalb der Zeile zusammenfassen
-      final cleaned = trimmed.replaceAll(RegExp(r' {4,}'), '  ').trimLeft();
-
-      // Sehr kurze Zeilen mit nur Formular-Platzhaltern überspringen
-      if (cleaned.length < 3) continue;
-
-      // Seitenreferenz-Zeilen überspringen (z.B. "Ges 100 - Berliner...")
-      if (cleaned.startsWith('Ges 100')) continue;
-      if (RegExp(r'^\d+\s*$').hasMatch(cleaned)) continue; // Seitenzahlen
-
-      buffer.writeln(cleaned);
-    }
-
-    return buffer.toString().trim();
-  }
-
-  /// Fallback: Syncfusion Formularfelder von Seite 5-11 extrahieren.
+  /// Extrahiert Textinhalte der Formularfelder von Seite 5-11.
+  /// Nutzt den Appearance-Stream (/AP/N) als primäre Quelle,
+  /// field.text als Fallback.
   static String _extractFormFieldContents(PdfDocument document) {
     try {
       final form = document.form;
@@ -168,6 +73,7 @@ class PdfImportService {
         if (field is! PdfTextBoxField) continue;
         if (field.text.trim().isEmpty) continue;
 
+        // Seitenzuordnung
         int pageIndex = -1;
         try {
           final page = field.page;
@@ -178,14 +84,19 @@ class PdfImportService {
           continue;
         }
 
+        // Nur Seite 5-11 (Index 4-10)
         if (pageIndex < 4 || pageIndex > 10) continue;
 
-        final clean = _cleanFieldText(field.text.trim());
-        if (clean.isEmpty) continue;
-        if (clean.length <= 3 && RegExp(r'^[\d\s\./ ]+$').hasMatch(clean)) continue;
+        // Text extrahieren: zuerst Appearance-Stream, dann field.text
+        var text = _extractFromAppearanceStream(field);
+        text ??= _cleanFieldText(field.text.trim());
+        if (text.isEmpty) continue;
+
+        // Kurze Nummerierungen überspringen
+        if (text.length <= 3 && RegExp(r'^[\d\s\./ ]+$').hasMatch(text)) continue;
 
         pageFields.putIfAbsent(pageIndex, () => []);
-        pageFields[pageIndex]!.add(clean);
+        pageFields[pageIndex]!.add(text);
       }
 
       if (pageFields.isEmpty) return '';
@@ -204,7 +115,109 @@ class PdfImportService {
     }
   }
 
-  /// Bereinigt Feldtext von Binärdaten (Syncfusion-Fallback).
+  /// Extrahiert Text aus dem Appearance-Stream (/AP/N) eines Feldes.
+  /// Parst PDF-Textoperatoren (text) Tj aus dem dekomprimierten Stream.
+  /// Gibt null zurück wenn kein AP-Stream vorhanden.
+  static String? _extractFromAppearanceStream(PdfTextBoxField field) {
+    try {
+      final helper = PdfFieldHelper.getHelper(field);
+      final dict = helper.dictionary;
+      if (dict == null) return null;
+
+      final ap = dict[PdfName('AP')];
+      if (ap is! PdfDictionary) return null;
+
+      var n = ap[PdfName('N')];
+      if (n is PdfReferenceHolder) n = n.object;
+      if (n is! PdfStream) return null;
+
+      n.decompress();
+      final data = n.dataStream;
+      if (data == null || data.isEmpty) return null;
+
+      final streamText = latin1.decode(Uint8List.fromList(data));
+
+      // PDF-Textoperatoren parsen: (text) Tj
+      final buffer = StringBuffer();
+      final tjPattern = RegExp(r'\(([^)]*)\)\s*Tj');
+      // Td-Operatoren für Zeilenumbrüche tracken
+      final lines = streamText.split('\n');
+      for (final line in lines) {
+        final trimmed = line.trim();
+
+        // Td-Operator: x y Td (Textposition)
+        final tdMatch = RegExp(r'([-\d.]+)\s+([-\d.]+)\s+Td').firstMatch(trimmed);
+        if (tdMatch != null) {
+          final y = double.tryParse(tdMatch.group(2)!) ?? 0;
+          // Negativer Y-Wert = neue Zeile
+          if (y < -1) {
+            buffer.write('\n');
+          }
+        }
+
+        // Tj-Operator: (text) Tj
+        final matches = tjPattern.allMatches(trimmed);
+        for (final match in matches) {
+          var text = match.group(1)!;
+          // PDF-Escapes dekodieren
+          text = _decodePdfString(text);
+          buffer.write(text);
+        }
+      }
+
+      final result = buffer.toString().trim();
+      return result.length > 5 ? result : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Dekodiert PDF-String-Escapes wie \374 (oktal) → ü
+  static String _decodePdfString(String raw) {
+    final buffer = StringBuffer();
+    var i = 0;
+    while (i < raw.length) {
+      if (raw[i] == '\\' && i + 1 < raw.length) {
+        final next = raw[i + 1];
+        if (next == 'n') {
+          buffer.write('\n');
+          i += 2;
+        } else if (next == 'r') {
+          buffer.write('\r');
+          i += 2;
+        } else if (next == 't') {
+          buffer.write('\t');
+          i += 2;
+        } else if (next == '(' || next == ')' || next == '\\') {
+          buffer.write(next);
+          i += 2;
+        } else if (next.codeUnitAt(0) >= 0x30 && next.codeUnitAt(0) <= 0x37) {
+          // Oktal-Escape: \NNN
+          var octal = '';
+          var j = i + 1;
+          while (j < raw.length &&
+              j < i + 4 &&
+              raw[j].codeUnitAt(0) >= 0x30 &&
+              raw[j].codeUnitAt(0) <= 0x37) {
+            octal += raw[j];
+            j++;
+          }
+          final charCode = int.parse(octal, radix: 8);
+          buffer.writeCharCode(charCode);
+          i = j;
+        } else {
+          buffer.write(next);
+          i += 2;
+        }
+      } else {
+        buffer.write(raw[i]);
+        i++;
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// Bereinigt field.text von Binärdaten (Fallback).
   static String _cleanFieldText(String raw) {
     final allowed = RegExp(
       r'[a-zA-ZäöüÄÖÜß0-9\s\.,;:!\?\-\(\)\[\]/&%€@\+\*#"' "'" r'°§–—…]',
@@ -222,7 +235,8 @@ class PdfImportService {
       }
     }
 
-    final clean = raw.substring(0, cutPoint)
+    final clean = raw
+        .substring(0, cutPoint)
         .replaceAll(RegExp(r'[^\x20-\x7EäöüÄÖÜß\n\r\t–—…€§°]'), ' ')
         .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
@@ -232,7 +246,7 @@ class PdfImportService {
     return clean;
   }
 
-  /// Extrahiert statischen Seitentext (Fallback).
+  /// Extrahiert statischen Seitentext (Fallback für PDFs ohne Formularfelder).
   static String _extractPageText(PdfDocument document) {
     try {
       final extractor = PdfTextExtractor(document);
