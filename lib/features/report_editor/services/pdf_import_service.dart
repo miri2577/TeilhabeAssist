@@ -112,45 +112,35 @@ class PdfImportService {
   }
 
   /// Bereinigt Feldtext von Binärdaten und Encoding-Artefakten.
-  /// Erkennt Garbage-Runs und schneidet den Text davor ab.
+  /// Erkennt den Punkt wo der Text in Binärdaten übergeht und schneidet dort ab.
   static String _cleanFieldText(String raw) {
-    // Erlaubte Zeichen: ASCII-druckbar + deutsche Sonderzeichen
-    // Alles andere ist in diesem Kontext Binärmüll
+    // Erlaubte Zeichen: Buchstaben, Ziffern, deutsche Sonderzeichen, Satzzeichen
     final allowed = RegExp(
-      r'[a-zA-Z0-9äöüÄÖÜß\s\.,;:!\?\-\(\)\[\]/&%€@\+\*#"' "'" r'°§–—…\n\r\t]',
+      r'[a-zA-ZäöüÄÖÜß0-9\s\.,;:!\?\-\(\)\[\]/&%€@\+\*#"' "'" r'°§–—…]',
     );
 
-    // Text zeichenweise prüfen, bei Garbage-Run abschneiden
-    final buffer = StringBuffer();
-    var garbageRun = 0;
-
-    for (var i = 0; i < raw.length; i++) {
-      final char = raw[i];
-      if (allowed.hasMatch(char)) {
-        // Wenn vorher ein kurzer Garbage-Run war, Leerzeichen einfügen
-        if (garbageRun > 0 && garbageRun <= 2) {
-          buffer.write(' ');
-        }
-        garbageRun = 0;
-        buffer.write(char);
-      } else {
-        garbageRun++;
-        // Bei 5+ aufeinanderfolgenden Garbage-Zeichen → hier abschneiden
-        if (garbageRun >= 5) {
-          break;
-        }
+    // Finde den Punkt wo der Text in Garbage übergeht:
+    // Sliding-Window von 10 Zeichen — wenn >50% ungültig, hier abschneiden
+    int cutPoint = raw.length;
+    for (var i = 0; i < raw.length - 10; i++) {
+      var badCount = 0;
+      for (var j = i; j < i + 10 && j < raw.length; j++) {
+        if (!allowed.hasMatch(raw[j])) badCount++;
+      }
+      if (badCount > 5) {
+        cutPoint = i;
+        break;
       }
     }
 
-    final result = buffer.toString()
-        .replaceAll(RegExp(r'[ \t]{3,}'), '  ')
+    final clean = raw.substring(0, cutPoint)
+        .replaceAll(RegExp(r'[^\x20-\x7EäöüÄÖÜß\n\r\t–—…€§°]'), ' ')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
 
-    // Zu kurz nach Bereinigung → wahrscheinlich nur Müll
-    if (raw.length > 20 && result.length < 10) return '';
-
-    return result;
+    if (raw.length > 20 && clean.length < 10) return '';
+    return clean;
   }
 
   /// Extrahiert statischen Seitentext (Fallback).
