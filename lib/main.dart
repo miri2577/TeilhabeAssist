@@ -11,6 +11,7 @@ import 'package:teilhabe_assist/features/privacy/signature_store.dart';
 import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/pseudonymization/engine/user_dictionary.dart';
 import 'package:teilhabe_assist/features/pseudonymization/providers/pseudonym_providers.dart';
+import 'package:teilhabe_assist/features/api/prompts/system_prompts.dart';
 import 'package:teilhabe_assist/features/report_editor/providers/report_providers.dart';
 import 'package:teilhabe_assist/features/report_editor/services/draft_storage.dart';
 
@@ -38,6 +39,12 @@ void main() async {
 
   final appSettingsNotifier = AppSettingsNotifier();
   await appSettingsNotifier.init();
+
+  // Benutzerdefinierte Prompts laden
+  SystemPrompts.loadCustomPrompts(
+    infoPrompt: settingsStorage.customInfoPrompt,
+    brpPrompt: settingsStorage.customBrpPrompt,
+  );
 
   runApp(
     ProviderScope(

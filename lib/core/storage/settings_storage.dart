@@ -62,6 +62,20 @@ class SettingsStorage {
   set selectedModel(String? value) =>
       value != null ? _box?.put('selected_model', value) : _box?.delete('selected_model');
 
+  /// Benutzerdefinierter System-Prompt für Informationsberichte
+  String? get customInfoPrompt => _box?.get('custom_info_prompt');
+  set customInfoPrompt(String? value) =>
+      value != null && value.isNotEmpty
+          ? _box?.put('custom_info_prompt', value)
+          : _box?.delete('custom_info_prompt');
+
+  /// Benutzerdefinierter System-Prompt für BRP
+  String? get customBrpPrompt => _box?.get('custom_brp_prompt');
+  set customBrpPrompt(String? value) =>
+      value != null && value.isNotEmpty
+          ? _box?.put('custom_brp_prompt', value)
+          : _box?.delete('custom_brp_prompt');
+
   Future<void> close() async {
     await _box?.close();
     _box = null;

@@ -205,8 +205,30 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
           onPressed: () => setState(() => _pdfBytes = null),
           tooltip: 'Zurück zur Auswahl',
         ),
+        IconButton(
+          icon: const Icon(Icons.save_as),
+          onPressed: _saveAs,
+          tooltip: 'Speichern unter...',
+        ),
       ],
     );
+  }
+
+  Future<void> _saveAs() async {
+    if (_pdfBytes == null) return;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'PDF speichern unter...',
+      fileName: _generateFileName(),
+      allowedExtensions: ['pdf'],
+      type: FileType.custom,
+    );
+    if (path == null) return;
+    await File(path).writeAsBytes(_pdfBytes!);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF gespeichert: ${path.split('/').last}')),
+      );
+    }
   }
 
   Future<void> _export(ReportDraft draft) async {

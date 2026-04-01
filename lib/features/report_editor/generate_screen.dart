@@ -132,7 +132,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
 
       if (!mounted) return;
 
-      _generatedText = response.text;
+      _generatedText = _stripAiClosingText(response.text);
       _usageData = response;
 
       // Rekonstruktion: Platzhalter durch Originaldaten ersetzen
@@ -241,6 +241,28 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         ),
       ),
     );
+  }
+
+  /// Entfernt typische KI-Schlussfloskeln, die nicht in den Bericht gehören.
+  String _stripAiClosingText(String text) {
+    // Muster für KI-Metakommentare am Ende des Textes
+    final patterns = [
+      RegExp(r'\n---\s*\n.*$', dotAll: true), // Alles nach "---" Trennlinie
+      RegExp(r'\nWenn du möchtest[^]*$', caseSensitive: false),
+      RegExp(r'\nMöchtest du[^]*$', caseSensitive: false),
+      RegExp(r'\nSoll ich[^]*$', caseSensitive: false),
+      RegExp(r'\nIch kann[^]*?erstellen\.\s*$', caseSensitive: false),
+      RegExp(r'\nBei Bedarf[^]*$', caseSensitive: false),
+      RegExp(r'\nGerne kann ich[^]*$', caseSensitive: false),
+      RegExp(r'\nBitte beachte,? dass[^]*$', caseSensitive: false),
+      RegExp(r'\nHinweis:?\s*Dies[^]*$', caseSensitive: false),
+    ];
+
+    var result = text;
+    for (final pattern in patterns) {
+      result = result.replaceAll(pattern, '');
+    }
+    return result.trimRight();
   }
 
   String get _stepTitle => switch (_step) {
@@ -461,7 +483,6 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
                 : Markdown(
                     data: _generatedText,
                     selectable: true,
-                    shrinkWrap: true,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
                     ),

@@ -365,6 +365,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 24),
 
+              // === KI-PROMPTS ===
+              _sectionTitle('KI-Prompts', theme),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.edit_note),
+                  title: const Text('System-Prompts bearbeiten'),
+                  subtitle: const Text(
+                      'Anweisungen an die KI für Informationsbericht und BRP anpassen'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () => context.push('/prompts'),
+                ),
+              ),
+              const SizedBox(height: 24),
+
               // === DATENSCHUTZ ===
               _sectionTitle('Datenschutz & Recht', theme),
               Card(

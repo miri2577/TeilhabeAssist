@@ -14,7 +14,6 @@ class FormFillerService {
     required String generatedText,
     required Map<String, String> metadata,
   }) async {
-    // Original-Template laden
     final ByteData templateBytes;
     try {
       templateBytes = await rootBundle.load(
@@ -25,64 +24,34 @@ class FormFillerService {
           'PDF-Vorlage "informationsbericht_101.pdf" konnte nicht geladen werden. '
           'Bitte prüfen Sie, ob die Datei unter assets/templates/ vorhanden ist.');
     }
+
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
-    // Formularfelder befüllen (falls vorhanden – manche PDFs haben keine AcroForm-Felder)
-    try {
-      final form = doc.form;
-      _trySetField(form, 'ID Kostenübernahme', metadata['id_kostenuebernahme']);
-      _trySetField(form, 'Berichtszeitraum von', metadata['berichtszeitraum_von']);
-      _trySetField(form, 'Berichtszeitraum bis', metadata['berichtszeitraum_bis']);
-      _trySetField(form, 'Leistungstyp', metadata['leistungstyp']);
-      _trySetField(form, 'Leistungserbringer', metadata['leistungserbringer']);
-      _trySetField(form, 'Familienname', metadata['familienname']);
-      _trySetField(form, 'Vorname', metadata['vorname']);
-      _trySetField(form, 'Geburtsdatum', metadata['geburtsdatum']);
-    } catch (_) {
-      // PDF hat keine AcroForm-Felder – nur Freitext einfügen
-    }
+    // Formularfelder befüllen (falls vorhanden)
+    _tryFillForm(doc, {
+      'ID Kostenübernahme': metadata['id_kostenuebernahme'],
+      'Berichtszeitraum von': metadata['berichtszeitraum_von'],
+      'Berichtszeitraum bis': metadata['berichtszeitraum_bis'],
+      'Leistungstyp': metadata['leistungstyp'],
+      'Leistungserbringer': metadata['leistungserbringer'],
+      'Familienname': metadata['familienname'],
+      'Vorname': metadata['vorname'],
+      'Geburtsdatum': metadata['geburtsdatum'],
+    });
 
     // Fließtext in die Freitextbereiche schreiben
     final sections = _parseSections(generatedText);
 
-    // Seite 2: Allgemeine Informationen (großes Textfeld)
-    if (doc.pages.count > 1 && sections.containsKey('allgemeine')) {
-      _drawTextOnPage(
-        doc.pages[1],
-        sections['allgemeine']!,
-        left: 35, top: 280, width: 525, height: 400,
-      );
-    }
+    _tryDrawSection(doc, 1, sections['allgemeine'],
+        left: 35, top: 280, width: 525, height: 400);
+    _tryDrawSection(doc, 2, sections['ziele'],
+        left: 35, top: 310, width: 525, height: 350);
+    _tryDrawSection(doc, 3, sections['anmerkungen'],
+        left: 35, top: 120, width: 525, height: 450);
+    _tryDrawSection(doc, 4, sections['zusammenfassung'],
+        left: 35, top: 100, width: 525, height: 300);
 
-    // Seite 3: Teilhabeziele
-    if (doc.pages.count > 2 && sections.containsKey('ziele')) {
-      _drawTextOnPage(
-        doc.pages[2],
-        sections['ziele']!,
-        left: 35, top: 310, width: 525, height: 350,
-      );
-    }
-
-    // Seite 4: Weitere Anmerkungen
-    if (doc.pages.count > 3 && sections.containsKey('anmerkungen')) {
-      _drawTextOnPage(
-        doc.pages[3],
-        sections['anmerkungen']!,
-        left: 35, top: 120, width: 525, height: 450,
-      );
-    }
-
-    // Seite 5: Zusammenfassung
-    if (doc.pages.count > 4 && sections.containsKey('zusammenfassung')) {
-      _drawTextOnPage(
-        doc.pages[4],
-        sections['zusammenfassung']!,
-        left: 35, top: 100, width: 525, height: 300,
-      );
-    }
-
-    // Flatten form fields
-    try { doc.form.flattenAllFields(); } catch (_) {}
+    _tryFlattenForm(doc);
 
     final bytes = Uint8List.fromList(await doc.save());
     doc.dispose();
@@ -104,54 +73,51 @@ class FormFillerService {
           'PDF-Vorlage "mdb-ges_100_11_v12sp.pdf" konnte nicht geladen werden. '
           'Bitte prüfen Sie, ob die Datei unter assets/templates/ vorhanden ist.');
     }
+
     final doc = PdfDocument(inputBytes: templateBytes.buffer.asUint8List());
 
-    try {
-      final form = doc.form;
-      _trySetField(form, 'Name, Vorname', '${metadata['familienname']}, ${metadata['vorname']}');
-      _trySetField(form, 'Straße', metadata['strasse']);
-      _trySetField(form, 'Postleitzahl', metadata['plz']);
-      _trySetField(form, 'Ort', metadata['ort']);
-      _trySetField(form, 'Telefon', metadata['telefon']);
-    } catch (_) {}
+    final name = [metadata['familienname'], metadata['vorname']]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(', ');
 
-    // Freitextbereiche
+    _tryFillForm(doc, {
+      'Name, Vorname': name.isNotEmpty ? name : null,
+      'Straße': metadata['strasse'],
+      'Postleitzahl': metadata['plz'],
+      'Ort': metadata['ort'],
+      'Telefon': metadata['telefon'],
+    });
+
     final sections = _parseSections(generatedText);
 
-    // Seite 5 (F): Bericht über bisherige Entwicklung
-    if (doc.pages.count > 5 && sections.containsKey('entwicklung')) {
-      _drawTextOnPage(
-        doc.pages[5],
-        sections['entwicklung']!,
-        left: 35, top: 130, width: 525, height: 550,
-      );
-    }
+    _tryDrawSection(doc, 5, sections['entwicklung'],
+        left: 35, top: 130, width: 525, height: 550);
+    _tryDrawSection(doc, 7, sections['faehigkeiten'],
+        left: 300, top: 80, width: 260, height: 600);
+    _tryDrawSection(doc, 8, sections['ziele_wohnen'],
+        left: 60, top: 80, width: 500, height: 200);
 
-    // Seite 7 (H): Fähigkeiten und Ressourcen
-    if (doc.pages.count > 7 && sections.containsKey('faehigkeiten')) {
-      _drawTextOnPage(
-        doc.pages[7],
-        sections['faehigkeiten']!,
-        left: 300, top: 80, width: 260, height: 600,
-      );
-    }
+    _tryFlattenForm(doc);
 
-    // Seite 8 (K.I): Ziele Selbstversorgung/Wohnen
-    if (doc.pages.count > 8 && sections.containsKey('ziele_wohnen')) {
-      _drawTextOnPage(
-        doc.pages[8],
-        sections['ziele_wohnen']!,
-        left: 60, top: 80, width: 500, height: 200,
-      );
-    }
-
-    try { doc.form.flattenAllFields(); } catch (_) {}
     final bytes = Uint8List.fromList(await doc.save());
     doc.dispose();
     return bytes;
   }
 
   // --- Hilfsmethoden ---
+
+  /// Versucht Formularfelder zu befüllen. Ignoriert Fehler komplett,
+  /// da viele PDFs keine AcroForm-Felder haben.
+  static void _tryFillForm(PdfDocument doc, Map<String, String?> fields) {
+    try {
+      final form = doc.form;
+      for (final entry in fields.entries) {
+        _trySetField(form, entry.key, entry.value);
+      }
+    } catch (_) {
+      // PDF hat keine AcroForm-Felder – nur Freitext einfügen
+    }
+  }
 
   static void _trySetField(PdfForm form, String fieldName, String? value) {
     if (value == null || value.isEmpty) return;
@@ -163,9 +129,35 @@ class FormFillerService {
           return;
         }
       }
+    } catch (_) {}
+  }
+
+  /// Versucht Text auf eine bestimmte Seite zu schreiben.
+  /// Prüft Seitenzahl und ob Text vorhanden ist.
+  static void _tryDrawSection(
+    PdfDocument doc,
+    int pageIndex,
+    String? text, {
+    required double left,
+    required double top,
+    required double width,
+    required double height,
+  }) {
+    if (text == null || text.trim().isEmpty) return;
+    if (doc.pages.count <= pageIndex) return;
+
+    try {
+      _drawTextOnPage(doc.pages[pageIndex], text,
+          left: left, top: top, width: width, height: height);
     } catch (_) {
-      // Feld nicht gefunden – ignorieren
+      // Zeichenfehler auf Seite ignorieren – besser leere Seite als Crash
     }
+  }
+
+  static void _tryFlattenForm(PdfDocument doc) {
+    try {
+      doc.form.flattenAllFields();
+    } catch (_) {}
   }
 
   static void _drawTextOnPage(
@@ -176,16 +168,20 @@ class FormFillerService {
     required double width,
     required double height,
   }) {
+    // Markdown-Syntax entfernen für saubere PDF-Ausgabe
+    final cleanText = text
+        .replaceAll(RegExp(r'^#+\s*', multiLine: true), '')
+        .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1');
+
     final font = PdfStandardFont(PdfFontFamily.helvetica, 9);
     final format = PdfStringFormat(lineSpacing: 2);
 
-    // Text kürzen falls er nicht in den Bereich passt
-    final measured = font.measureString(text,
+    final measured = font.measureString(cleanText,
         layoutArea: Size(width, 0), format: format);
 
     final displayText = measured.height > height
-        ? _truncateToFit(text, font, format, width, height)
-        : text;
+        ? _truncateToFit(cleanText, font, format, width, height)
+        : cleanText;
 
     page.graphics.drawString(
       displayText,

@@ -5,7 +5,26 @@ class SystemPrompts {
 
   static const String version = 'INFO_BERICHT_v1.0.0';
 
+  /// Benutzerdefinierte Prompt-Overrides (gesetzt aus SettingsStorage)
+  static String? _customInfoPrompt;
+  static String? _customBrpPrompt;
+
+  /// Wird beim App-Start aus SettingsStorage geladen.
+  static void loadCustomPrompts({String? infoPrompt, String? brpPrompt}) {
+    _customInfoPrompt = infoPrompt;
+    _customBrpPrompt = brpPrompt;
+  }
+
   static String getPrompt(ReportType type) {
+    return switch (type) {
+      ReportType.informationsbericht =>
+          _customInfoPrompt ?? _informationsberichtPrompt,
+      ReportType.brp => _customBrpPrompt ?? _brpPrompt,
+    };
+  }
+
+  /// Default-Prompts für den Editor (zum Zurücksetzen)
+  static String getDefaultPrompt(ReportType type) {
     return switch (type) {
       ReportType.informationsbericht => _informationsberichtPrompt,
       ReportType.brp => _brpPrompt,
