@@ -112,22 +112,45 @@ class PdfImportService {
   }
 
   /// Bereinigt Feldtext von Binärdaten und Encoding-Artefakten.
+  /// Erkennt Garbage-Runs und schneidet den Text davor ab.
   static String _cleanFieldText(String raw) {
-    // Nicht-druckbare Zeichen entfernen (außer Newline, Tab)
-    final cleaned = raw.replaceAll(RegExp(r'[^\x20-\x7E\xA0-\xFF\u0100-\u024F\n\r\t\u00C0-\u00FF\u00E4\u00F6\u00FC\u00C4\u00D6\u00DC\u00DF\u2013\u2014\u2018\u2019\u201C\u201D\u2026]'), '');
+    // Erlaubte Zeichen: ASCII-druckbar + deutsche Sonderzeichen
+    // Alles andere ist in diesem Kontext Binärmüll
+    final allowed = RegExp(
+      r'[a-zA-Z0-9äöüÄÖÜß\s\.,;:!\?\-\(\)\[\]/&%€@\+\*#"' "'" r'°§–—…\n\r\t]',
+    );
 
-    // Mehrere Leerzeichen zusammenfassen
-    final normalized = cleaned
+    // Text zeichenweise prüfen, bei Garbage-Run abschneiden
+    final buffer = StringBuffer();
+    var garbageRun = 0;
+
+    for (var i = 0; i < raw.length; i++) {
+      final char = raw[i];
+      if (allowed.hasMatch(char)) {
+        // Wenn vorher ein kurzer Garbage-Run war, Leerzeichen einfügen
+        if (garbageRun > 0 && garbageRun <= 2) {
+          buffer.write(' ');
+        }
+        garbageRun = 0;
+        buffer.write(char);
+      } else {
+        garbageRun++;
+        // Bei 5+ aufeinanderfolgenden Garbage-Zeichen → hier abschneiden
+        if (garbageRun >= 5) {
+          break;
+        }
+      }
+    }
+
+    final result = buffer.toString()
         .replaceAll(RegExp(r'[ \t]{3,}'), '  ')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
 
-    // Wenn mehr als 30% der Zeichen verloren gingen → Feld ist Binärmüll
-    if (raw.length > 10 && normalized.length < raw.length * 0.7) {
-      return '';
-    }
+    // Zu kurz nach Bereinigung → wahrscheinlich nur Müll
+    if (raw.length > 20 && result.length < 10) return '';
 
-    return normalized;
+    return result;
   }
 
   /// Extrahiert statischen Seitentext (Fallback).
