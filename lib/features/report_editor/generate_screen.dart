@@ -234,25 +234,31 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   }
 
   /// Entfernt typische KI-Schlussfloskeln, die nicht in den Bericht gehören.
+  /// Nur die letzten Absätze werden geprüft — nie mitten im Text löschen.
   String _stripAiClosingText(String text) {
-    // Muster für KI-Metakommentare am Ende des Textes
-    final patterns = [
-      RegExp(r'\n---\s*\n.*$', dotAll: true), // Alles nach "---" Trennlinie
-      RegExp(r'\nWenn du möchtest[^]*$', caseSensitive: false),
-      RegExp(r'\nMöchtest du[^]*$', caseSensitive: false),
-      RegExp(r'\nSoll ich[^]*$', caseSensitive: false),
-      RegExp(r'\nIch kann[^]*?erstellen\.\s*$', caseSensitive: false),
-      RegExp(r'\nBei Bedarf[^]*$', caseSensitive: false),
-      RegExp(r'\nGerne kann ich[^]*$', caseSensitive: false),
-      RegExp(r'\nBitte beachte,? dass[^]*$', caseSensitive: false),
-      RegExp(r'\nHinweis:?\s*Dies[^]*$', caseSensitive: false),
-    ];
+    final lines = text.trimRight().split('\n');
 
-    var result = text;
-    for (final pattern in patterns) {
-      result = result.replaceAll(pattern, '');
+    // Von hinten die letzten Absätze prüfen (max. letzte 8 Zeilen)
+    var cutIndex = lines.length;
+    for (var i = lines.length - 1; i >= 0 && i >= lines.length - 8; i--) {
+      final line = lines[i].trim().toLowerCase();
+      if (line.isEmpty) continue;
+
+      if (line.startsWith('wenn du möchtest') ||
+          line.startsWith('möchtest du') ||
+          line.startsWith('soll ich') ||
+          line.startsWith('gerne kann ich') ||
+          line.startsWith('bei bedarf') ||
+          line.startsWith('ich kann') && line.contains('erstellen') ||
+          line == '---') {
+        cutIndex = i;
+      } else {
+        // Sobald eine echte Inhaltszeile kommt, aufhören
+        break;
+      }
     }
-    return result.trimRight();
+
+    return lines.sublist(0, cutIndex).join('\n').trimRight();
   }
 
   String get _stepTitle => switch (_step) {
