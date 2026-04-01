@@ -58,7 +58,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
 
       if (ext == 'pdf') {
         final bytes = await File(path).readAsBytes();
-        final result = PdfImportService.extractText(bytes, fileName);
+        final result = await PdfImportService.extractText(bytes, fileName, filePath: path);
         extractedText = result.text;
         fileName = '${result.fileName} (${result.pageCount} Seiten)';
       } else if (ext == 'txt' || ext == 'md') {

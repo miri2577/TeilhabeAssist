@@ -37,7 +37,7 @@ class _PseudonymPreviewScreenState
 
       if (ext == 'pdf') {
         final bytes = await File(path).readAsBytes();
-        final result = PdfImportService.extractText(bytes, xFile.name);
+        final result = await PdfImportService.extractText(bytes, xFile.name, filePath: path);
         _textController.text = result.text;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
