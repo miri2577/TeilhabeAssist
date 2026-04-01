@@ -1,6 +1,10 @@
+import 'dart:io';
+
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../report_editor/services/pdf_import_service.dart';
 import '../models/pseudonym_mapping.dart';
 import '../models/pseudonym_result.dart';
 import '../providers/pseudonym_providers.dart';
@@ -18,11 +22,44 @@ class _PseudonymPreviewScreenState
     extends ConsumerState<PseudonymPreviewScreen> {
   final _textController = TextEditingController();
   bool _confirmed = false;
+  bool _isDragging = false;
 
   @override
   void dispose() {
     _textController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleFileDrop(DropDoneDetails details) async {
+    for (final xFile in details.files) {
+      final path = xFile.path;
+      final ext = path.split('.').last.toLowerCase();
+
+      if (ext == 'pdf') {
+        final bytes = await File(path).readAsBytes();
+        final result = PdfImportService.extractText(bytes, xFile.name);
+        _textController.text = result.text;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${xFile.name} importiert')),
+          );
+        }
+      } else if (ext == 'txt' || ext == 'md') {
+        _textController.text = await File(path).readAsString();
+      }
+      setState(() {});
+      break;
+    }
+  }
+
+  Future<void> _importPdf() async {
+    final result = await PdfImportService.pickAndExtract();
+    if (result == null || !mounted) return;
+    _textController.text = result.text;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${result.fileName} importiert (${result.pageCount} Seiten)')),
+    );
   }
 
   void _runPseudonymization() {
@@ -64,47 +101,68 @@ class _PseudonymPreviewScreenState
             children: [
               // Linke Seite: Eingabe
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'Originaltext eingeben',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Füge hier den Bericht oder Stichpunkte ein. '
-                        'Personenbezogene Daten werden automatisch erkannt.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                child: DropTarget(
+                  onDragDone: _handleFileDrop,
+                  onDragEntered: (_) => setState(() => _isDragging = true),
+                  onDragExited: (_) => setState(() => _isDragging = false),
+                  child: Container(
+                    decoration: _isDragging
+                        ? BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                            border: Border.all(color: theme.colorScheme.primary, width: 2),
+                          )
+                        : null,
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Originaltext eingeben',
+                          style: theme.textTheme.titleMedium,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _textController,
-                          maxLines: null,
-                          expands: true,
-                          textAlignVertical: TextAlignVertical.top,
-                          decoration: const InputDecoration(
-                            hintText:
-                                'Text hier einfügen oder eingeben...',
-                            alignLabelWithHint: true,
+                        const SizedBox(height: 8),
+                        Text(
+                          'Text einfügen, PDF hierher ziehen oder importieren. '
+                          'Personenbezogene Daten werden automatisch erkannt.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
-                          onChanged: (_) => setState(() {}),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.tonalIcon(
-                        onPressed: _textController.text.trim().isEmpty
-                            ? null
-                            : _runPseudonymization,
-                        icon: const Icon(Icons.shield_outlined),
-                        label: const Text('Pseudonymisierung starten'),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            maxLines: null,
+                            expands: true,
+                            textAlignVertical: TextAlignVertical.top,
+                            decoration: const InputDecoration(
+                              hintText:
+                                  'Text hier einfügen, eingeben oder PDF hierher ziehen...',
+                              alignLabelWithHint: true,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _importPdf,
+                              icon: const Icon(Icons.picture_as_pdf, size: 18),
+                              label: const Text('PDF importieren'),
+                            ),
+                            const Spacer(),
+                            FilledButton.tonalIcon(
+                              onPressed: _textController.text.trim().isEmpty
+                                  ? null
+                                  : _runPseudonymization,
+                              icon: const Icon(Icons.shield_outlined),
+                              label: const Text('Pseudonymisierung starten'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
