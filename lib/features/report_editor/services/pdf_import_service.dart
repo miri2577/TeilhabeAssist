@@ -86,7 +86,23 @@ class PdfImportService {
         if (lastPage != null) args.addAll(['-l', '$lastPage']);
         args.addAll([pdfPath, '-']);
 
-        final result = await Process.run('pdftotext', args);
+        // Voller Pfad nötig da Flutter-Apps eingeschränkten PATH haben
+        const pdftotextPaths = [
+          '/usr/local/bin/pdftotext',
+          '/opt/homebrew/bin/pdftotext',
+          'pdftotext',
+        ];
+
+        ProcessResult? result;
+        for (final bin in pdftotextPaths) {
+          try {
+            result = await Process.run(bin, args);
+            if (result.exitCode == 0) break;
+          } catch (_) {
+            continue;
+          }
+        }
+        if (result == null) return '';
 
         if (result.exitCode == 0) {
           final text = (result.stdout as String).trim();
