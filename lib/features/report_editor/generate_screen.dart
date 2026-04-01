@@ -58,29 +58,14 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   String? _pseudonymizedNotes;
   String? _pseudonymizedPreviousReport;
 
-  int _page4RemovedSections = 0;
-
   void _runPseudonymization() {
     final draft = ref.read(reportDraftNotifierProvider);
     if (draft == null) return;
 
-    var notesText = draft.allNotesAsText;
-    var previousReport = draft.previousReport;
-
-    // BRP Seite-4-Schutz: erkannte Abschnitte automatisch entfernen
+    // BRP Seite-4-Warnung (nur Hinweis, kein Auto-Removal)
     if (draft.type == ReportType.brp) {
-      final allText = '$notesText\n$previousReport';
+      final allText = '${draft.allNotesAsText}\n${draft.previousReport}';
       _page4Warnings = BrpPage4Detector.detect(allText);
-
-      if (_page4Warnings.isNotEmpty) {
-        // Seite-4-Inhalte aus beiden Texten entfernen
-        final cleanedNotes = BrpPage4Detector.removePage4Content(notesText);
-        final cleanedPrev = BrpPage4Detector.removePage4Content(previousReport);
-        notesText = cleanedNotes.cleanText;
-        previousReport = cleanedPrev.cleanText;
-        _page4RemovedSections =
-            cleanedNotes.removedSections + cleanedPrev.removedSections;
-      }
     }
 
     // EINE Engine für alle Texte → eindeutige Platzhalter-Nummern
@@ -89,13 +74,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     _engine!.loadUserDictionary(dictionary);
 
     // Vorbericht ZUERST pseudonymisieren (gleiche Namen bekommen gleiche Platzhalter)
-    if (previousReport.isNotEmpty) {
-      final prevResult = _engine!.pseudonymize(previousReport);
+    if (draft.previousReport.isNotEmpty) {
+      final prevResult = _engine!.pseudonymize(draft.previousReport);
       _pseudonymizedPreviousReport = prevResult.cleanText;
     }
 
     // Dann Notizen – keepMappings: true damit gleiche Namen gleiche Platzhalter bekommen
-    _pseudonymResult = _engine!.pseudonymize(notesText, keepMappings: true);
+    _pseudonymResult = _engine!.pseudonymize(draft.allNotesAsText, keepMappings: true);
     _pseudonymizedNotes = _pseudonymResult!.cleanText;
 
     setState(() => _step = GenerateStep.review);
@@ -304,13 +289,13 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         ),
         const SizedBox(height: 16),
 
-        // BRP Seite-4-Info (automatisch entfernt)
+        // BRP Seite-4-Warnung
         if (_page4Warnings.isNotEmpty) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.08),
-              border: Border.all(color: Colors.blue, width: 1),
+              color: Colors.orange.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.orange, width: 1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -318,18 +303,15 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.auto_fix_high,
-                        color: Colors.blue.shade700, size: 20),
+                    Icon(Icons.warning_amber,
+                        color: Colors.orange.shade700, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _page4RemovedSections > 0
-                            ? 'BRP Seite 4 erkannt und automatisch entfernt '
-                              '($_page4RemovedSections Abschnitte)'
-                            : 'Mögliche BRP Seite 4 Inhalte erkannt',
+                        'Mögliche BRP Seite 4 Inhalte erkannt',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade700,
+                          color: Colors.orange.shade700,
                         ),
                       ),
                     ),
@@ -337,21 +319,33 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Die psychiatrische Anamnese (Seite 4 des BRP) wird nicht '
-                  'an die API übermittelt. Die erkannten Abschnitte wurden '
-                  'automatisch aus dem Text entfernt.',
+                  'Die psychiatrische Anamnese (Seite 4 des BRP) darf nicht '
+                  'an die API übermittelt werden. Bitte prüfe den Text unten '
+                  'sorgfältig und stelle sicher, dass keine Seite-4-Inhalte '
+                  'enthalten sind. Gehe ggf. zurück zum Editor und entferne '
+                  'diese Passagen aus dem Vorbericht.',
                   style: theme.textTheme.bodySmall,
+                ),
+                const SizedBox(height: 4),
+                ..._page4Warnings.map(
+                  (w) => Padding(
+                    padding: const EdgeInsets.only(left: 4, top: 2),
+                    child: Text('• ${w.message}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.orange.shade800,
+                        )),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
         ],
 
-        // Pseudonymisierungs-Warnings (scrollbar, max 120px)
+        // Pseudonymisierungs-Warnings
         if (_pseudonymResult!.warnings.isNotEmpty) ...[
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 120),
+            constraints: const BoxConstraints(maxHeight: 100),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -381,19 +375,73 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
         ],
 
-        // Pseudonymisierter Text
+        // Hinweis: Gesamter Text der an die API gesendet wird
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.visibility, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Gesamter Text der an die API gesendet wird '
+                  '(Notizen + Vorbericht, pseudonymisiert):',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Kompletter pseudonymisierter Text (Notizen + Vorbericht)
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
             ),
             child: SingleChildScrollView(
-              child: HighlightedText(result: _pseudonymResult!),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Notizen (mit Highlighting)
+                  if (_pseudonymizedNotes != null &&
+                      _pseudonymizedNotes!.isNotEmpty) ...[
+                    Text('AKTUELLE NOTIZEN:',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    const SizedBox(height: 4),
+                    HighlightedText(result: _pseudonymResult!),
+                  ],
+                  // Vorbericht
+                  if (_pseudonymizedPreviousReport != null &&
+                      _pseudonymizedPreviousReport!.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    Text('VORBERICHT:',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      _pseudonymizedPreviousReport!,
+                      style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),

@@ -1,8 +1,11 @@
-/// Erkennung und Blockierung von BRP Seite 4 (Psychiatrische Anamnese).
+/// Erkennung von BRP Seite 4 (Psychiatrische Anamnese).
 ///
 /// Seite 4 des BRP enthält die Krankengeschichte und darf gemäß Berliner
 /// Rahmenvertrag NICHT an den Kostenträger weitergeleitet werden.
 /// Diese Daten werden auch NICHT pseudonymisiert an die API gesendet.
+///
+/// Die Erkennung ist bewusst konservativ: nur WARNEN, nicht automatisch
+/// entfernen – der Benutzer entscheidet im Review-Step.
 class BrpPage4Detector {
   BrpPage4Detector._();
 
@@ -52,7 +55,7 @@ class BrpPage4Detector {
     if (textLower.contains('seite 4') || textLower.contains('seite vier')) {
       warnings.add(BrpPage4Warning(
         message: 'Explizite Referenz auf "Seite 4" des BRP erkannt',
-        severity: BrpPage4Severity.blocked,
+        severity: BrpPage4Severity.warning,
       ));
     }
 
@@ -75,100 +78,33 @@ class BrpPage4Detector {
       }
     }
 
-    // Bewertung
+    // Bewertung – nur Warnungen, nie automatisch blockieren
     if (keywordHits >= 3 && hasBrpContext) {
       warnings.add(BrpPage4Warning(
         message: 'Text enthält wahrscheinlich Inhalte aus BRP Seite 4 '
             '(Psychiatrische Anamnese/Krankengeschichte). '
             'Gefundene Schlüsselwörter: ${foundKeywords.join(", ")}',
-        severity: BrpPage4Severity.blocked,
+        severity: BrpPage4Severity.warning,
       ));
     } else if (keywordHits >= 2) {
       warnings.add(BrpPage4Warning(
         message: 'Text enthält möglicherweise Inhalte aus BRP Seite 4. '
             'Bitte prüfen: ${foundKeywords.join(", ")}',
-        severity: BrpPage4Severity.warning,
+        severity: BrpPage4Severity.info,
       ));
     } else if (keywordHits >= 1 && hasBrpContext) {
       warnings.add(BrpPage4Warning(
         message: 'Im BRP-Kontext gefunden: ${foundKeywords.join(", ")} '
             '– bitte prüfen ob dies Seite 4 betrifft',
-        severity: BrpPage4Severity.warning,
+        severity: BrpPage4Severity.info,
       ));
     }
 
     return warnings;
   }
-
-  /// Prüft ob der Text blockiert werden sollte (nicht an API senden)
-  static bool shouldBlock(String text) {
-    return detect(text).any((w) => w.severity == BrpPage4Severity.blocked);
-  }
-
-  /// Entfernt erkannte Seite-4-Abschnitte aus dem Text.
-  /// Gibt den bereinigten Text und die Anzahl entfernter Abschnitte zurück.
-  static ({String cleanText, int removedSections}) removePage4Content(String text) {
-    final lines = text.split('\n');
-    final cleanLines = <String>[];
-    var inPage4Section = false;
-    var removedSections = 0;
-
-    for (final line in lines) {
-      final lower = line.toLowerCase().trim();
-
-      // Abschnitt beginnt mit Seite-4-Überschrift
-      if (_isPage4SectionStart(lower)) {
-        inPage4Section = true;
-        removedSections++;
-        continue;
-      }
-
-      // Nächster Abschnitt (neue Überschrift) beendet Seite-4-Bereich
-      if (inPage4Section && _isNewSectionStart(line)) {
-        inPage4Section = false;
-      }
-
-      if (!inPage4Section) {
-        cleanLines.add(line);
-      }
-    }
-
-    return (cleanText: cleanLines.join('\n'), removedSections: removedSections);
-  }
-
-  static bool _isPage4SectionStart(String lowerLine) {
-    const starters = [
-      'krankengeschichte',
-      'psychiatrische anamnese',
-      'psychiatrische vorgeschichte',
-      'familienanamnese',
-      'substanzanamnese',
-      'drogenanamnese',
-      'alkoholanamnese',
-      'psychopathologischer befund',
-      'seite 4',
-      'vertraulicher teil',
-    ];
-    for (final s in starters) {
-      if (lowerLine.contains(s)) return true;
-    }
-    return false;
-  }
-
-  static bool _isNewSectionStart(String line) {
-    final trimmed = line.trim();
-    // Markdown-Überschriften oder nummerierte Abschnitte
-    if (trimmed.startsWith('#')) return true;
-    if (RegExp(r'^\d+[\.\)]\s').hasMatch(trimmed)) return true;
-    // Großbuchstaben-Überschriften (z.B. "AKTUELLE LEBENSSITUATION")
-    if (trimmed.length > 5 &&
-        trimmed == trimmed.toUpperCase() &&
-        trimmed.contains(RegExp(r'[A-ZÄÖÜ]'))) return true;
-    return false;
-  }
 }
 
-enum BrpPage4Severity { warning, blocked }
+enum BrpPage4Severity { info, warning }
 
 class BrpPage4Warning {
   final String message;
