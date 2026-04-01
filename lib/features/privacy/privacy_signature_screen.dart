@@ -77,7 +77,7 @@ class _PrivacySignatureScreenState
             content: Text('Datenschutzerklärung unterschrieben und gespeichert'),
           ),
         );
-        context.go('/');
+        context.pop();
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -94,7 +94,7 @@ class _PrivacySignatureScreenState
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/settings'),
+          onPressed: () => context.pop(),
         ),
         title: const Text('Datenschutzerklärung'),
         actions: [

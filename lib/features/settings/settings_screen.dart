@@ -343,7 +343,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           'Ausgeschlossene Wörter und gelernte Namen'),
                       trailing:
                           const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () => context.go('/dictionary'),
+                      onTap: () => context.push('/dictionary'),
                     ),
                     const Divider(height: 1),
                     ListTile(
@@ -391,7 +391,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           'Datenschutzerklärung lesen und rechtssicher unterzeichnen'),
                       trailing:
                           const Icon(Icons.arrow_forward_ios, size: 16),
-                      onTap: () => context.go('/privacy'),
+                      onTap: () => context.push('/privacy'),
                     ),
                     const Divider(height: 1),
                     ListTile(

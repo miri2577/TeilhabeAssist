@@ -204,15 +204,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         title: Text(_stepTitle),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (_step == GenerateStep.review) {
-              context.go('/editor');
-            } else if (_step == GenerateStep.result) {
-              context.go('/editor');
-            } else {
-              context.go('/editor');
-            }
-          },
+          onPressed: () => context.pop(),
         ),
         actions: [
           if (_step == GenerateStep.result)
@@ -611,7 +603,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           alignment: WrapAlignment.end,
           children: [
             OutlinedButton.icon(
-              onPressed: () => context.go('/editor'),
+              onPressed: () => context.pop(),
               icon: const Icon(Icons.edit, size: 18),
               label: const Text('Zurück'),
             ),

@@ -191,7 +191,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
+          onPressed: () => context.pop(),
         ),
         title: const Text('Neuer Bericht'),
       ),
@@ -510,7 +510,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
           FilledButton.icon(
             onPressed: _canGenerate(draft) ? () {
               _syncNotesToDraft();
-              context.go('/generate');
+              context.push('/generate');
             } : null,
             icon: const Icon(Icons.auto_awesome),
             label: const Text('Generieren'),

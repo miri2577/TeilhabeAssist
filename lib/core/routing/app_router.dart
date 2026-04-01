@@ -78,12 +78,12 @@ class _HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.science_outlined),
             tooltip: 'Pseudonymisierung testen',
-            onPressed: () => context.go('/pseudonymize'),
+            onPressed: () => context.push('/pseudonymize'),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Einstellungen',
-            onPressed: () => context.go('/settings'),
+            onPressed: () => context.push('/settings'),
           ),
           const SizedBox(width: 8),
         ],
@@ -116,13 +116,13 @@ class _HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 48),
                 FilledButton.icon(
-                  onPressed: () => context.go('/editor'),
+                  onPressed: () => context.push('/editor'),
                   icon: const Icon(Icons.add),
                   label: const Text('Neuen Bericht erstellen'),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: () => context.go('/settings'),
+                  onPressed: () => context.push('/settings'),
                   icon: const Icon(Icons.vpn_key),
                   label: const Text('API-Key einrichten'),
                 ),

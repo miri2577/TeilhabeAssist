@@ -37,7 +37,7 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/settings'),
+          onPressed: () => context.pop(),
         ),
         title: const Text('Wörterbuch verwalten'),
         bottom: TabBar(
