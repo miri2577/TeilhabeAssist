@@ -80,12 +80,16 @@ class PdfImportService {
         // Nur Seite 5-11 (Index 4-10)
         if (pageIndex < 4 || pageIndex > 10) continue;
 
+        // Text bereinigen: nicht-druckbare Zeichen und Binärdaten entfernen
+        final raw = field.text.trim();
+        final clean = _cleanFieldText(raw);
+        if (clean.isEmpty) continue;
+
         // Reine Nummerierungen und Kurzkürzel überspringen
-        final text = field.text.trim();
-        if (text.length <= 3 && RegExp(r'^[\d\s\./ ]+$').hasMatch(text)) continue;
+        if (clean.length <= 3 && RegExp(r'^[\d\s\./ ]+$').hasMatch(clean)) continue;
 
         pageFields.putIfAbsent(pageIndex, () => []);
-        pageFields[pageIndex]!.add(text);
+        pageFields[pageIndex]!.add(clean);
       }
 
       if (pageFields.isEmpty) return '';
@@ -105,6 +109,25 @@ class PdfImportService {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Bereinigt Feldtext von Binärdaten und Encoding-Artefakten.
+  static String _cleanFieldText(String raw) {
+    // Nicht-druckbare Zeichen entfernen (außer Newline, Tab)
+    final cleaned = raw.replaceAll(RegExp(r'[^\x20-\x7E\xA0-\xFF\u0100-\u024F\n\r\t\u00C0-\u00FF\u00E4\u00F6\u00FC\u00C4\u00D6\u00DC\u00DF\u2013\u2014\u2018\u2019\u201C\u201D\u2026]'), '');
+
+    // Mehrere Leerzeichen zusammenfassen
+    final normalized = cleaned
+        .replaceAll(RegExp(r'[ \t]{3,}'), '  ')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+
+    // Wenn mehr als 30% der Zeichen verloren gingen → Feld ist Binärmüll
+    if (raw.length > 10 && normalized.length < raw.length * 0.7) {
+      return '';
+    }
+
+    return normalized;
   }
 
   /// Extrahiert statischen Seitentext (Fallback).
