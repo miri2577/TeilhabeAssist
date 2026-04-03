@@ -9,6 +9,7 @@ import 'package:teilhabe_assist/features/report_editor/report_editor_screen.dart
 import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/settings/dictionary_screen.dart';
 import 'package:teilhabe_assist/features/settings/prompt_editor_screen.dart';
+import 'package:teilhabe_assist/features/help/help_screen.dart';
 import 'package:teilhabe_assist/features/settings/settings_screen.dart';
 
 final appRouter = GoRouter(
@@ -61,6 +62,10 @@ final appRouter = GoRouter(
       path: '/prompts',
       builder: (context, state) => const PromptEditorScreen(),
     ),
+    GoRoute(
+      path: '/help',
+      builder: (context, state) => const HelpScreen(),
+    ),
   ],
 );
 
@@ -75,6 +80,11 @@ class _HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('TeilhabeAssist'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Hilfe & Dokumentation',
+            onPressed: () => context.push('/help'),
+          ),
           IconButton(
             icon: const Icon(Icons.science_outlined),
             tooltip: 'Pseudonymisierung testen',
