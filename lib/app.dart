@@ -7,7 +7,6 @@ import 'package:teilhabe_assist/features/auth/auth_service.dart';
 import 'package:teilhabe_assist/features/auth/lock_screen.dart';
 import 'package:teilhabe_assist/features/privacy/privacy_policy_text.dart';
 import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
-import 'package:signature/signature.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -94,11 +93,6 @@ class _PrivacyGateScreen extends ConsumerStatefulWidget {
 
 class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
   final _nameController = TextEditingController();
-  final _signatureController = SignatureController(
-    penStrokeWidth: 2.5,
-    penColor: Colors.black,
-    exportBackgroundColor: Colors.white,
-  );
   bool _hasReadPolicy = false;
   bool _saving = false;
   final _scrollController = ScrollController();
@@ -106,39 +100,23 @@ class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _signatureController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  bool get _canSign =>
-      _hasReadPolicy &&
-      _nameController.text.trim().length >= 3;
+  bool get _canConfirm =>
+      _hasReadPolicy && _nameController.text.trim().length >= 3;
 
-  Future<void> _sign() async {
-    if (!_canSign) return;
-
-    // Prüfe Signatur erst beim Klick
-    if (_signatureController.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte zuerst im Feld unterschreiben.')),
-      );
-      return;
-    }
-
+  Future<void> _confirm() async {
+    if (!_canConfirm) return;
     setState(() => _saving = true);
 
     try {
-      final signatureImage = await _signatureController.toPngBytes();
-      if (signatureImage == null) return;
-
       final store = ref.read(signatureStoreProvider);
-      await store.saveSignature(
+      await store.saveConfirmation(
         fullName: _nameController.text.trim(),
-        signaturePng: signatureImage,
         policyText: kPrivacyPolicyText,
       );
-
       widget.onSigned();
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -159,7 +137,6 @@ class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
           constraints: const BoxConstraints(maxWidth: 700),
           child: Column(
             children: [
-              // Hinweis
               Container(
                 margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                 padding: const EdgeInsets.all(12),
@@ -175,15 +152,13 @@ class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
                     Expanded(
                       child: Text(
                         'Vor der Nutzung der App muss die Datenschutzerklärung '
-                        'gelesen und unterzeichnet werden. Dies ist einmalig erforderlich.',
+                        'gelesen und bestätigt werden. Dies ist einmalig erforderlich.',
                         style: TextStyle(color: Colors.orange.shade700),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // Policy Text
               Expanded(
                 child: Scrollbar(
                   controller: _scrollController,
@@ -201,8 +176,6 @@ class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
                   ),
                 ),
               ),
-
-              // Signatur-Bereich
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -232,56 +205,21 @@ class _PrivacyGateScreenState extends ConsumerState<_PrivacyGateScreen> {
                     TextField(
                       controller: _nameController,
                       decoration: const InputDecoration(
-                        labelText: 'Vollständiger Name (Vor- und Nachname)',
+                        labelText: 'Vollständiger Name',
                         prefixIcon: Icon(Icons.person),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 16),
-                    Text('Unterschrift:', style: theme.textTheme.labelLarge),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: theme.colorScheme.outlineVariant),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Signature(
-                          controller: _signatureController,
-                          backgroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          onPressed: () {
-                            _signatureController.clear();
-                            setState(() {});
-                          },
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Unterschrift löschen'),
-                        ),
-                        const Spacer(),
-                        FilledButton.icon(
-                          onPressed: _canSign && !_saving ? _sign : null,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
-                                )
-                              : const Icon(Icons.draw),
-                          label:
-                              const Text('Rechtsverbindlich unterschreiben'),
-                        ),
-                      ],
+                    FilledButton.icon(
+                      onPressed: _canConfirm && !_saving ? _confirm : null,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle),
+                      label: const Text('Gelesen und bestätigt'),
                     ),
                   ],
                 ),
