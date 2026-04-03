@@ -57,6 +57,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   PseudonymEngine? _engine;
   String? _pseudonymizedNotes;
   String? _pseudonymizedPreviousReport;
+  String? _pseudonymizedReferenceReport;
 
   void _runPseudonymization() {
     final draft = ref.read(reportDraftNotifierProvider);
@@ -73,13 +74,19 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     final dictionary = ref.read(userDictionaryProvider);
     _engine!.loadUserDictionary(dictionary);
 
-    // Vorbericht ZUERST pseudonymisieren (gleiche Namen bekommen gleiche Platzhalter)
+    // Referenz-Bericht ZUERST pseudonymisieren (eigene Platzhalter-Serie)
+    if (draft.referenceReport.isNotEmpty) {
+      final refResult = _engine!.pseudonymize(draft.referenceReport);
+      _pseudonymizedReferenceReport = refResult.cleanText;
+    }
+
+    // Vorbericht pseudonymisieren (gleiche Namen bekommen gleiche Platzhalter)
     if (draft.previousReport.isNotEmpty) {
-      final prevResult = _engine!.pseudonymize(draft.previousReport);
+      final prevResult = _engine!.pseudonymize(draft.previousReport, keepMappings: true);
       _pseudonymizedPreviousReport = prevResult.cleanText;
     }
 
-    // Dann Notizen – keepMappings: true damit gleiche Namen gleiche Platzhalter bekommen
+    // Dann Notizen
     _pseudonymResult = _engine!.pseudonymize(draft.allNotesAsText, keepMappings: true);
     _pseudonymizedNotes = _pseudonymResult!.cleanText;
 
@@ -123,6 +130,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         reportType: currentDraft.type,
         pseudonymizedNotes: _pseudonymizedNotes ?? _pseudonymResult!.cleanText,
         pseudonymizedPreviousReport: _pseudonymizedPreviousReport,
+        pseudonymizedReferenceReport: _pseudonymizedReferenceReport,
       );
 
       // Non-Streaming Aufruf – liefert echte Token-Usage-Daten

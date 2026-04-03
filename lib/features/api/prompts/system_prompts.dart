@@ -88,12 +88,30 @@ PLATZHALTER-REGELN (ZWINGEND):
 - Ändere KEINE bestehenden Platzhalter-Nummern (z.B. [PERSON_001] nicht zu [PERSON_002] umbenennen).
 - Kopiere Platzhalter immer exakt so, wie sie im Eingabetext stehen.
 
+BEISPIEL-FORMULIERUNGEN (zur stilistischen Orientierung):
+
+Allgemeine Informationen:
+"[PERSON_001] lebt weiterhin in der eigenen Wohnung im Bezirk [ADRESSE_001]. Die Wohnsituation konnte im Berichtszeitraum stabilisiert werden. Durch regelmäßige Unterstützung bei der Haushaltsführung gelang es, eine grundlegende Ordnung aufrechtzuerhalten. Als förderlicher Kontextfaktor erweist sich die hohe Motivation von [PERSON_001], die eigene Wohnung langfristig zu erhalten."
+
+Teilhabeziel – Sichtweise der Person:
+"[PERSON_001] äußert den Wunsch, die wöchentliche Tagesstruktur beizubehalten und perspektivisch wieder einer beruflichen Tätigkeit nachzugehen. Die regelmäßigen Termine mit der Bezugsbetreuung empfindet [PERSON_001] als hilfreich und stabilisierend."
+
+Teilhabeziel – Sichtweise des Leistungserbringers:
+"Aus fachlicher Sicht zeigt [PERSON_001] eine zunehmende Mitwirkungsbereitschaft. Die Fähigkeit zur eigenständigen Terminplanung hat sich im Berichtszeitraum verbessert. Gleichwohl besteht weiterhin Unterstützungsbedarf bei der Bewältigung unvorhergesehener Situationen, die zu Rückzugstendenzen führen können."
+
+Kontextfaktoren:
+"Als Förderfaktor wirkt die vertrauensvolle Beziehung zur Bezugsbetreuung sowie die Anbindung an das wöchentliche Gruppenangebot. Als Barriere zeigt sich die eingeschränkte Belastbarkeit bei Mehrfachanforderungen sowie die Tendenz zur sozialen Isolation in Krisenphasen."
+
+Zusammenfassung:
+"Zusammenfassend lässt sich festhalten, dass [PERSON_001] im Berichtszeitraum in den Bereichen Wohnen und Tagesstruktur Fortschritte erzielen konnte. Die vereinbarten Teilhabeziele wurden teilweise erreicht. Wir empfehlen die Fortführung der Unterstützung im bisherigen Umfang, um die erreichten Fortschritte zu sichern und die Teilhabe am gesellschaftlichen Leben weiter auszubauen."
+
 EINGABE-FORMAT:
 Der Nutzer liefert:
 1. Den pseudonymisierten Vorbericht (falls vorhanden)
 2. Stichpunkte zum aktuellen Verlauf und Stand
 3. Die vereinbarten Teilhabeziele
 4. Angaben zu erbrachten Fachleistungsstunden
+5. Optional: Einen Referenz-Bericht zur stilistischen Orientierung
 ''';
 
   static const _brpPrompt = '''
@@ -149,5 +167,19 @@ PLATZHALTER-REGELN (ZWINGEND):
 - Erfinde NIEMALS eigene Platzhalter. Wenn du einen Namen, ein Datum oder eine Adresse benötigst, die nicht als Platzhalter im Eingabetext enthalten ist, schreibe stattdessen "[ANGABE FEHLT]".
 - Ändere KEINE bestehenden Platzhalter-Nummern.
 - Kopiere Platzhalter immer exakt so, wie sie im Eingabetext stehen.
+
+BEISPIEL-FORMULIERUNGEN (zur stilistischen Orientierung):
+
+Aktuelle Lebenssituation:
+"[PERSON_001] lebt in eigenem bzw. gesichertem Wohnraum. Im zurückliegenden Zeitraum konnten bestehende Fortschritte im Bereich Wohnen und Alltagsbewältigung stabilisiert und kleinschrittig ausgebaut werden. Gleichwohl bleibt die Sicherung des Wohnraums ein zentrales Ziel. Für die Alltagsorganisation und insbesondere für haushaltsbezogene Entscheidungen ist [PERSON_001] weiterhin auf strukturierende Unterstützung und externe Impulse angewiesen."
+
+Hilfebedarf (ICF-orientiert):
+"Im Lebensbereich Selbstversorgung (d5) zeigt [PERSON_001] Ressourcen in der grundlegenden Körperpflege und Ernährungszubereitung. Einschränkungen bestehen bei der Organisation des Haushalts und der finanziellen Planung. Als Förderfaktor wirkt die Bereitschaft, Unterstützungsangebote anzunehmen. Als Barriere zeigt sich die eingeschränkte Handlungsplanung bei komplexen Alltagsanforderungen."
+
+Ziele und Maßnahmen:
+"Leitziel: [PERSON_001] möchte die eigene Wohnung langfristig erhalten und den Alltag möglichst selbstständig gestalten. Handlungsziel (SMART): [PERSON_001] hält bis [DATUM_001] eine wöchentliche Routine zur Wohnungsreinigung ein, unterstützt durch gemeinsames Aufräumen mit der Bezugsbetreuung. Maßnahmen: Gemeinsame Wochenplanung, motivierende Gesprächsführung, Begleitung bei Behördengängen, Unterstützung bei der Terminkoordination."
+
+Zusammenfassung:
+"Die Zusammenarbeit mit [PERSON_001] gestaltet sich konstruktiv. Es zeigt sich eine hohe Mitwirkungsbereitschaft. Die bisherigen Fortschritte empfehlen die Fortführung der Unterstützung im Rahmen des TBEW. Die Zuordnung zur Hilfebedarfsgruppe [HBG] wird als weiterhin angemessen eingeschätzt."
 ''';
 }

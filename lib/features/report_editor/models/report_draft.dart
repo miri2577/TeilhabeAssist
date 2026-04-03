@@ -27,6 +27,10 @@ class ReportDraft {
   /// (zentrale Grundlage für die KI-Generierung)
   String currentNotes;
 
+  /// Optionaler Referenz-Bericht für stilistische Orientierung
+  /// (ein besonders gut geschriebener Bericht als Vorlage)
+  String referenceReport;
+
   /// Generierter Berichtstext (nach API-Aufruf)
   String? generatedText;
 
@@ -39,6 +43,7 @@ class ReportDraft {
     DateTime? createdAt,
     this.previousReport = '',
     this.currentNotes = '',
+    this.referenceReport = '',
     List<ReportModule>? modules,
     this.generatedText,
     this.pseudonymizedText,

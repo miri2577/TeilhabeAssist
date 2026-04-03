@@ -161,6 +161,71 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
         .updateCurrentNotes(_notesController.text);
   }
 
+  // --- Referenz-Bericht ---
+
+  Future<void> _importReferenceReport() async {
+    final result = await PdfImportService.pickAndExtract();
+    if (result == null || !mounted) return;
+    ref
+        .read(reportDraftNotifierProvider.notifier)
+        .updateReferenceReport(result.text);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Referenz-Bericht geladen: ${result.fileName}')),
+    );
+  }
+
+  Widget _buildReferenceReportSection(ThemeData theme, ReportDraft draft) {
+    final hasRef = draft.referenceReport.isNotEmpty;
+
+    if (!hasRef) {
+      return OutlinedButton.icon(
+        onPressed: _importReferenceReport,
+        icon: const Icon(Icons.style, size: 18),
+        label: const Text('Referenz-Bericht laden (optional)'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    final wordCount = draft.referenceReport
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .length;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.purple.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.style, color: Colors.purple.shade700, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Referenz-Bericht geladen ($wordCount Wörter) – '
+              'KI orientiert sich am Stil',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () {
+              ref
+                  .read(reportDraftNotifierProvider.notifier)
+                  .updateReferenceReport('');
+            },
+            tooltip: 'Referenz entfernen',
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- BUILD ---
 
   @override
@@ -583,6 +648,12 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                         ),
                         const Divider(height: 24),
                       ],
+
+                      // Referenz-Bericht (optional)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                        child: _buildReferenceReportSection(theme, draft),
+                      ),
 
                       // Module (ReorderableListView)
                       Expanded(

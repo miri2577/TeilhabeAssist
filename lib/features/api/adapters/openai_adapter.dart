@@ -122,6 +122,14 @@ class OpenAIAdapter implements LLMAdapter {
       userContent.writeln();
     }
 
+    if (request.pseudonymizedReferenceReport != null &&
+        request.pseudonymizedReferenceReport!.isNotEmpty) {
+      userContent.writeln('## REFERENZ-BERICHT (zur stilistischen Orientierung, pseudonymisiert):');
+      userContent.writeln('Orientiere dich am Stil und Sprachduktus dieses Berichts.');
+      userContent.writeln(request.pseudonymizedReferenceReport);
+      userContent.writeln();
+    }
+
     userContent.writeln('## AKTUELLE STICHPUNKTE:');
     userContent.writeln(request.pseudonymizedNotes);
 

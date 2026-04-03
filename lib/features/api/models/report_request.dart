@@ -6,6 +6,7 @@ class ReportRequest {
   final ReportType reportType;
   final String pseudonymizedNotes;
   final String? pseudonymizedPreviousReport;
+  final String? pseudonymizedReferenceReport;
   final double temperature;
 
   const ReportRequest({
@@ -14,6 +15,7 @@ class ReportRequest {
     required this.reportType,
     required this.pseudonymizedNotes,
     this.pseudonymizedPreviousReport,
+    this.pseudonymizedReferenceReport,
     this.temperature = 0.3,
   });
 }
