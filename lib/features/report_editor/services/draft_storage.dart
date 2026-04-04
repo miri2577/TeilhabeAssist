@@ -51,6 +51,8 @@ class DraftStorage {
       'type': draft.type.name,
       'createdAt': draft.createdAt.toIso8601String(),
       'previousReport': draft.previousReport,
+      'currentNotes': draft.currentNotes,
+      'referenceReport': draft.referenceReport,
       'generatedText': draft.generatedText,
       'modules': draft.modules.map((m) => {
         'id': m.id,
@@ -89,6 +91,8 @@ class DraftStorage {
       type: ReportType.values.byName(data['type'] as String),
       createdAt: DateTime.parse(data['createdAt'] as String),
       previousReport: data['previousReport'] as String? ?? '',
+      currentNotes: data['currentNotes'] as String? ?? '',
+      referenceReport: data['referenceReport'] as String? ?? '',
       modules: modules,
       generatedText: data['generatedText'] as String?,
     );

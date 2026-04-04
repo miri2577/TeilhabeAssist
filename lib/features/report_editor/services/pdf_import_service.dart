@@ -66,6 +66,13 @@ class PdfImportService {
         pageMap[document.pages[p]] = p;
       }
 
+      // PDF-Typ erkennen: BRP (Ges 100) oder Informationsbericht
+      final isBrp = document.pages.count > 15; // BRP hat 22 Seiten, InfoBericht 5
+      // BRP: Nur Seite 5-11 (Index 4-10), Seite 4 = Krankengeschichte überspringen
+      // Informationsbericht: Alle Seiten (Seite 2-5, Index 1-4)
+      final minPage = isBrp ? 4 : 1;
+      final maxPage = isBrp ? 10 : document.pages.count - 1;
+
       final pageFields = <int, List<String>>{};
 
       for (var i = 0; i < form.fields.count; i++) {
@@ -84,8 +91,8 @@ class PdfImportService {
           continue;
         }
 
-        // Nur Seite 5-11 (Index 4-10)
-        if (pageIndex < 4 || pageIndex > 10) continue;
+        // Seitenfilter je nach PDF-Typ
+        if (pageIndex < minPage || pageIndex > maxPage) continue;
 
         // Text extrahieren: zuerst Appearance-Stream, dann field.text
         var text = _extractFromAppearanceStream(field);

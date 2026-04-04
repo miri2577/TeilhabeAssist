@@ -254,13 +254,14 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
         title: const Text('Neuer Bericht'),
       ),
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 550),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 550),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 Icon(Icons.description_outlined, size: 72,
                     color: theme.colorScheme.primary),
                 const SizedBox(height: 24),
@@ -317,6 +318,7 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                   label: const Text('Aus Vorlage erstellen'),
                 ),
               ],
+              ),
             ),
           ),
         ),
