@@ -61,6 +61,12 @@ void main() async {
               settingsStorage.selectedProvider!,
             ),
           ),
+        customLogoProvider.overrideWith(
+          (ref) => settingsStorage.customLogo,
+        ),
+        customLogoNameProvider.overrideWith(
+          (ref) => settingsStorage.customLogoName,
+        ),
         userDictionaryProvider.overrideWithValue(userDictionary),
         draftStorageProvider.overrideWithValue(draftStorage),
         auditLogProvider.overrideWithValue(auditLog),

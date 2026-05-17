@@ -13,7 +13,10 @@ class DictionaryScreen extends ConsumerStatefulWidget {
 class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _addController = TextEditingController();
+  // Pro Tab ein eigener Controller — vermeidet, dass Texte im falschen
+  // Tab landen, wenn der User vor dem Submit den Tab wechselt.
+  final _excludeController = TextEditingController();
+  final _learnController = TextEditingController();
 
   @override
   void initState() {
@@ -24,7 +27,8 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    _addController.dispose();
+    _excludeController.dispose();
+    _learnController.dispose();
     super.dispose();
   }
 
@@ -52,24 +56,30 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
         controller: _tabController,
         children: [
           _buildWordList(
+            _excludeController,
             dictionary.excludedWordsList,
             'Wörter die NICHT als Namen erkannt werden sollen.\n'
             'Wenn die Pseudonymisierung ein normales Wort fälschlich als '
             'Name markiert (z.B. "Rose", "Werkstatt"), trage es hier ein. '
-            'Es wird dann nie mehr als Name erkannt.',
+            'Es wird dann nie mehr als Name erkannt.\n\n'
+            '⚠ Bitte nur EINZELNE Wörter eintragen — keine Phrasen oder '
+            'Sätze. Pro Eintrag genau ein Wort.',
             'Wort eingeben das kein Name ist...',
             (word) => dictionary.excludeWord(word),
             (word) => dictionary.removeExcludedWord(word),
             theme,
           ),
           _buildWordList(
+            _learnController,
             dictionary.learnedNamesList,
-            'Namen die IMMER pseudonymisiert werden sollen.\n'
-            'Wenn ein Name im Text nicht automatisch erkannt wird '
-            '(z.B. ein seltener Vorname wie "Dode" oder "Zygmunt"), '
-            'trage ihn hier ein. Er wird dann in jedem Bericht '
-            'automatisch durch einen Platzhalter ersetzt.',
-            'Name eingeben der erkannt werden soll...',
+            'Namen und Begriffe die IMMER pseudonymisiert werden sollen.\n'
+            'Wenn ein Wort im Text nicht automatisch erkannt wird '
+            '(z.B. ein seltener Vorname wie "Dode" oder ein Akronym '
+            'wie "DASI"), trage es hier ein.\n\n'
+            '⚠ Bitte nur EINZELNE Wörter eintragen — kein "Maria Müller", '
+            'sondern erst "Maria" und dann "Müller" als getrennte Einträge. '
+            'Pro Eintrag genau ein Wort.',
+            'Wort eingeben das erkannt werden soll...',
             (word) => dictionary.learnName(word),
             (word) => dictionary.removeLearnedName(word),
             theme,
@@ -80,6 +90,7 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
   }
 
   Widget _buildWordList(
+    TextEditingController controller,
     List<String> words,
     String description,
     String addHint,
@@ -116,17 +127,17 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
             children: [
               Expanded(
                 child: TextField(
-                  controller: _addController,
+                  controller: controller,
                   decoration: InputDecoration(
                     hintText: addHint,
                     isDense: true,
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.add),
                       onPressed: () async {
-                        final word = _addController.text.trim();
+                        final word = controller.text.trim();
                         if (word.isEmpty) return;
                         await onAdd(word);
-                        _addController.clear();
+                        controller.clear();
                         setState(() {});
                       },
                     ),
@@ -134,7 +145,7 @@ class _DictionaryScreenState extends ConsumerState<DictionaryScreen>
                   onSubmitted: (word) async {
                     if (word.trim().isEmpty) return;
                     await onAdd(word.trim());
-                    _addController.clear();
+                    controller.clear();
                     setState(() {});
                   },
                 ),

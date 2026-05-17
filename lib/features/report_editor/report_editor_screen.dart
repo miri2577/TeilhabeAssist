@@ -4,6 +4,10 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../pseudonymization/engine/pseudonym_engine.dart';
+import '../pseudonymization/models/pseudonym_result.dart';
+import '../pseudonymization/providers/pseudonym_providers.dart';
+import '../pseudonymization/ui/widgets/highlighted_text.dart';
 import 'models/report_draft.dart';
 import 'models/report_module.dart';
 import 'providers/report_providers.dart';
@@ -13,6 +17,7 @@ import 'services/template_storage.dart';
 import 'widgets/module_card.dart';
 import 'widgets/module_palette.dart';
 import 'widgets/quality_panel.dart';
+import 'widgets/stammdaten_card.dart';
 import 'widgets/template_dialog.dart';
 
 /// Einstiegs-Auswahl
@@ -73,30 +78,157 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
       }
 
       if (extractedText.isNotEmpty) {
-        _previousReportController.text = extractedText;
-        ref
-            .read(reportDraftNotifierProvider.notifier)
-            .updatePreviousReport(extractedText);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$fileName importiert')),
+        final accepted = await _showImportPseudonymPreview(
+          sourceLabel: fileName,
+          text: extractedText,
         );
+        if (!accepted || !mounted) continue;
+
+        final notifier = ref.read(reportDraftNotifierProvider.notifier);
+        final currentDraft = ref.read(reportDraftNotifierProvider);
+        final hasPreviousReport =
+            (currentDraft?.previousReport ?? '').trim().isNotEmpty;
+
+        if (!hasPreviousReport) {
+          // Erster Drop → Vorbericht
+          _previousReportController.text = extractedText;
+          notifier.updatePreviousReport(extractedText);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$fileName als Vorbericht geladen')),
+          );
+        } else {
+          // Folge-Drop → Notizen / Veränderungen
+          final existingNotes = _notesController.text;
+          final newNotes = existingNotes.trim().isEmpty
+              ? extractedText
+              : '$existingNotes\n\n$extractedText';
+          _notesController.text = newNotes;
+          _syncNotesToDraft();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$fileName als Notizen geladen')),
+          );
+        }
       }
-      break;
     }
   }
 
   Future<void> _importPdf() async {
     final result = await PdfImportService.pickAndExtract();
     if (result == null || !mounted) return;
+
+    final accepted = await _showImportPseudonymPreview(
+      sourceLabel: '${result.fileName} (${result.pageCount} Seiten)',
+      text: result.text,
+    );
+    if (!accepted || !mounted) return;
+
     _previousReportController.text = result.text;
     ref
         .read(reportDraftNotifierProvider.notifier)
         .updatePreviousReport(result.text);
+
+    final metaApplied = _applyMetadataToDraft(result.metadata);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${result.fileName} importiert (${result.pageCount} Seiten)')),
+      SnackBar(
+        content: Text(
+          '${result.fileName} importiert '
+          '(${result.pageCount} Seiten'
+          '${metaApplied > 0 ? ', $metaApplied Stamm-Daten übernommen' : ''})',
+        ),
+      ),
     );
+  }
+
+  int _wordCount(String text) =>
+      text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+
+  Widget _buildStatusBox({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    VoidCallback? onClear,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+          if (onClear != null)
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              tooltip: 'Entfernen',
+              onPressed: onClear,
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Übernimmt extrahierte Kopf-/Personendaten direkt in die strukturierten
+  /// Stammdaten des Drafts. Bestehende Werte werden **nicht** überschrieben.
+  int _applyMetadataToDraft(Map<String, String> metadata) {
+    if (metadata.isEmpty) return 0;
+    return ref
+            .read(reportDraftNotifierProvider.notifier)
+            .mergeStammdaten(metadata);
+  }
+
+  /// Zeigt einen Pflicht-Preview-Dialog für importierte Texte. Der Text wird
+  /// mit der aktuellen Pseudonymisierungs-Engine und dem User-Wörterbuch
+  /// gegen die Erkennung geprüft, bevor er als Vorbericht oder Referenz
+  /// übernommen wird. Damit sieht die Fachkraft sofort, welche Treffer die
+  /// Engine produziert und welche Begriffe ihr durchgehen — ohne erst durch
+  /// den Generate-Schritt gehen zu müssen.
+  Future<bool> _showImportPseudonymPreview({
+    required String sourceLabel,
+    required String text,
+  }) async {
+    final engine = PseudonymEngine();
+    engine.loadUserDictionary(ref.read(userDictionaryProvider));
+    final result = engine.pseudonymize(text);
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ImportPseudonymPreviewDialog(
+        sourceLabel: sourceLabel,
+        result: result,
+        onOpenDictionary: () {
+          Navigator.of(ctx).pop(false);
+          context.push('/dictionary');
+        },
+      ),
+    );
+    return accepted ?? false;
   }
 
   // --- Template ---
@@ -166,11 +298,26 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   Future<void> _importReferenceReport() async {
     final result = await PdfImportService.pickAndExtract();
     if (result == null || !mounted) return;
+
+    final accepted = await _showImportPseudonymPreview(
+      sourceLabel: 'Referenz-Bericht: ${result.fileName}',
+      text: result.text,
+    );
+    if (!accepted || !mounted) return;
+
     ref
         .read(reportDraftNotifierProvider.notifier)
         .updateReferenceReport(result.text);
+
+    final metaApplied = _applyMetadataToDraft(result.metadata);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Referenz-Bericht geladen: ${result.fileName}')),
+      SnackBar(
+        content: Text(
+          'Referenz-Bericht geladen: ${result.fileName}'
+          '${metaApplied > 0 ? ' · $metaApplied Stamm-Daten übernommen' : ''}',
+        ),
+      ),
     );
   }
 
@@ -567,6 +714,41 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
             onPressed: () => _saveAsTemplate(draft),
           ),
           const SizedBox(width: 8),
+          if (!draft.hasRequiredStammdaten)
+            Tooltip(
+              message: 'Stammdaten unvollständig — '
+                  '${draft.missingRequiredStammdaten.length} Pflichtfeld'
+                  '${draft.missingRequiredStammdaten.length == 1 ? '' : 'er'} '
+                  'fehlt in Kopfdaten / Persondaten.',
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber,
+                        color: Colors.red.shade700, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${draft.missingRequiredStammdaten.length} Pflichtfeld'
+                      '${draft.missingRequiredStammdaten.length == 1 ? '' : 'er'} '
+                      'fehlt',
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           FilledButton.icon(
             onPressed: _canGenerate(draft) ? () {
               _syncNotesToDraft();
@@ -598,30 +780,42 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
 
                       // Vorbericht-Hinweis (Folgebericht)
                       if (isFollowUp && draft.previousReport.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.06),
-                            border: Border.all(
-                                color: Colors.green.withValues(alpha: 0.3)),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.check_circle,
-                                  color: Colors.green.shade700, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Vorbericht geladen '
-                                  '(${draft.previousReport.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length} Wörter). '
-                                  'Trage unten die aktuellen Veränderungen als Stichpunkte ein.',
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ),
-                            ],
-                          ),
+                        _buildStatusBox(
+                          icon: Icons.check_circle,
+                          color: Colors.green.shade700,
+                          title: 'Vorbericht geladen',
+                          subtitle:
+                              '${_wordCount(draft.previousReport)} Wörter. '
+                              'Trage unten die aktuellen Veränderungen als '
+                              'Stichpunkte ein, oder ziehe eine weitere Datei '
+                              'in das Fenster — sie landet dann automatisch '
+                              'in den Notizen.',
+                          onClear: () {
+                            _previousReportController.clear();
+                            ref
+                                .read(reportDraftNotifierProvider.notifier)
+                                .updatePreviousReport('');
+                          },
+                        ),
+
+                      // Notizen-Hinweis (Folgebericht)
+                      if (isFollowUp && _notesController.text.trim().isNotEmpty)
+                        _buildStatusBox(
+                          icon: Icons.notes,
+                          color: Colors.blue.shade700,
+                          title: 'Notizen geladen',
+                          subtitle:
+                              '${_wordCount(_notesController.text)} Wörter '
+                              'in "Aktuelle Notizen / Veränderungen". '
+                              'Beide Texte (Vorbericht + Notizen) werden '
+                              'gemeinsam pseudonymisiert und an die API '
+                              'gesendet.',
+                          onClear: () {
+                            setState(() {
+                              _notesController.clear();
+                              _syncNotesToDraft();
+                            });
+                          },
                         ),
 
                       // Freies Notizfeld (Folgebericht)
@@ -644,7 +838,9 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                             ),
                             onChanged: (text) {
                               // Notizen live in allgemeineInfos-Modul schreiben
+                              // und Status-Box neu rendern.
                               _syncNotesToDraft();
+                              setState(() {});
                             },
                           ),
                         ),
@@ -669,6 +865,29 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                           },
                           itemBuilder: (context, index) {
                             final module = draft.modules[index];
+                            // Kopfdaten + Persondaten werden als
+                            // strukturierte Stammdaten-Karten gerendert
+                            // (Pflichtfelder, Validierung).
+                            if (module.type == ModuleType.kopfdaten) {
+                              return StammdatenCard(
+                                key: ValueKey(module.id),
+                                title: 'Kopfdaten',
+                                icon: Icons.badge_outlined,
+                                fields: kStammdatenKopfFields,
+                                color: theme.colorScheme.primary,
+                                initiallyExpanded: !draft.hasRequiredStammdaten,
+                              );
+                            }
+                            if (module.type == ModuleType.persondaten) {
+                              return StammdatenCard(
+                                key: ValueKey(module.id),
+                                title: 'Persondaten',
+                                icon: Icons.person_outline,
+                                fields: kStammdatenPersonFields,
+                                color: Colors.deepPurple,
+                                initiallyExpanded: !draft.hasRequiredStammdaten,
+                              );
+                            }
                             return ModuleCard(
                               key: ValueKey(module.id),
                               module: module,
@@ -762,9 +981,175 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
   }
 
   bool _canGenerate(ReportDraft draft) {
+    // Pflicht: alle Stammdaten-Pflichtfelder gefüllt
+    if (!draft.hasRequiredStammdaten) return false;
     if (_mode == EditorMode.folgebericht) {
       return draft.previousReport.isNotEmpty;
     }
     return draft.modules.any((m) => m.notes.trim().isNotEmpty);
+  }
+}
+
+/// Pflicht-Preview nach jedem Import. Zeigt der Fachkraft, welche Treffer
+/// die Engine in dem importierten Text produziert hat — vor der Übernahme.
+/// Bietet einen Shortcut zum Wörterbuch, wenn etwas fehlt oder zu viel
+/// markiert wird.
+class _ImportPseudonymPreviewDialog extends StatelessWidget {
+  const _ImportPseudonymPreviewDialog({
+    required this.sourceLabel,
+    required this.result,
+    required this.onOpenDictionary,
+  });
+
+  final String sourceLabel;
+  final PseudonymResult result;
+  final VoidCallback onOpenDictionary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900, maxHeight: 720),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.visibility,
+                      color: theme.colorScheme.primary, size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Pseudonymisierungs-Vorschau',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(false),
+                  ),
+                ],
+              ),
+              Text(
+                sourceLabel,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Chip(
+                    avatar: const Icon(Icons.check_circle, size: 16),
+                    label: Text('${result.totalReplacements} Ersetzungen'),
+                    backgroundColor: Colors.green.withValues(alpha: 0.1),
+                  ),
+                  if (result.warningCount > 0)
+                    Chip(
+                      avatar: const Icon(Icons.warning_amber, size: 16),
+                      label: Text('${result.warningCount} Warnungen'),
+                      backgroundColor: Colors.orange.withValues(alpha: 0.1),
+                    ),
+                  if (result.totalReplacements == 0)
+                    Chip(
+                      avatar: const Icon(Icons.info_outline, size: 16),
+                      label: const Text('Engine fand keine Treffer'),
+                      backgroundColor: Colors.red.withValues(alpha: 0.1),
+                    ),
+                ],
+              ),
+              if (result.warnings.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 100),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Warnungen — bitte prüfen:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ...result.warnings.map(
+                            (w) => Text(
+                              '• $w',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SingleChildScrollView(
+                    child: HighlightedText(result: result),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Treffer markiert = wird vor dem API-Versand durch einen '
+                'Platzhalter ersetzt. Fehlt ein Name oder Begriff? Über '
+                '"Wörterbuch" hinzufügen — der Import wird dann erneut '
+                'geprüft.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: onOpenDictionary,
+                    icon: const Icon(Icons.menu_book_outlined, size: 18),
+                    label: const Text('Wörterbuch öffnen'),
+                  ),
+                  const Spacer(),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Abbrechen'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Import übernehmen'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

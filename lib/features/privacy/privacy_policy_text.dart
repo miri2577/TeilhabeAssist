@@ -1,7 +1,7 @@
 const kPrivacyPolicyText = '''
 DATENSCHUTZERKLÄRUNG UND NUTZUNGSVEREINBARUNG
 TeilhabeAssist – KI-gestützte Berichterstellung
-Version 1.0 | Stand: März 2026
+Version 1.1 | Stand: Mai 2026
 
 ═══════════════════════════════════════════════════
 
@@ -20,7 +20,7 @@ TeilhabeAssist unterstützt Fachkräfte der Eingliederungshilfe bei der Erstellu
 • Sozialdaten gemäß § 67 SGB X
 • Gesundheitsdaten gemäß Art. 9 DSGVO
 • Berichtsinhalte und Stichpunkte der Fachkräfte
-• Zuordnungstabellen der Pseudonymisierung (verschlüsselt mit AES-256-GCM)
+• Zuordnungstabellen der Pseudonymisierung (verschlüsselt mit AES-256-CBC, Schlüssel im OS-Keystore)
 
 3.2 An den API-Provider übermittelte Daten:
 • AUSSCHLIESSLICH pseudonymisierte Texte, in denen alle personenbezogenen Daten durch Platzhalter ersetzt wurden (z.B. [PERSON_001], [DATUM_001])
@@ -33,7 +33,12 @@ a) Die Pseudonymisierungs-Engine erkennt automatisch personenbezogene Daten durc
 b) Die Fachkraft MUSS den pseudonymisierten Text auf einem Vorschau-Bildschirm prüfen, bevor er an die API übermittelt wird.
 c) Eine Pflicht-Bestätigung ist technisch erzwungen und nicht überspringbar.
 
-4.2 Die Zuordnungstabelle (Platzhalter ↔ Originaldaten) verlässt NIEMALS das Gerät. Sie wird lokal mit AES-256-GCM verschlüsselt und mit einem aus der Benutzer-Passphrase abgeleiteten Schlüssel (PBKDF2, 100.000 Iterationen) gesichert.
+4.2 Die Zuordnungstabelle (Platzhalter ↔ Originaldaten) verlässt NIEMALS das Gerät. Sie wird lokal mit AES-256-CBC (Hive HiveAesCipher) verschlüsselt. Der Verschlüsselungsschlüssel wird im OS-Keystore (Windows DPAPI, macOS/iOS Keychain, Android Keystore) abgelegt und ist nicht im Klartext auf dem Dateisystem auffindbar. Der Lock-Screen-Passworthash wird zusätzlich mit PBKDF2-HMAC-SHA256 (600.000 Iterationen, OWASP 2023) gegen ein 256-Bit-Salt aus dem OS-Entropie-Pool gesichert.
+
+4.3 GRENZEN DER PSEUDONYMISIERUNG (transparente Risikoinformation):
+   • Die automatische Erkennung kombiniert Regex-Muster, Wörterbuch-Abgleich und einen Lernspeicher. Sie ist ein HILFSWERKZEUG, keine Garantie. Insbesondere können seltene Nachnamen ohne Anrede, ungewöhnliche Schreibweisen, freie Datumsangaben oder kontextuelle Hinweise (Bezirk + Diagnose + Alter) der automatischen Erkennung entgehen.
+   • Die finale Verantwortung für die Pseudonymisierung liegt bei der prüfenden Fachkraft (siehe Pflicht-Bestätigung vor dem API-Versand, § 11 dieser Erklärung).
+   • Auch bei vollständiger Entfernung direkter Identifikatoren bleibt ein Re-Identifikations-Restrisiko über die Kombination von Diagnose-Codes (ICD-10), ICF-Domänen, regionalem Kontext und Lebenssituation. Dieses Risiko ist statistisch klein, aber nicht ausgeschlossen.
 
 5. API-PROVIDER UND DRITTLANDTRANSFER
 
@@ -93,11 +98,13 @@ Die psychiatrische Anamnese (Seite 4 des BRP) darf gemäß Berliner Rahmenvertra
 
 8.2 Das Audit-Log enthält KEINE personenbezogenen Daten – nur Metadaten und Zeitstempel.
 
-8.3 Das Audit-Log kann über die Einstellungen als JSON-Datei exportiert werden und dient als Nachweis für den Datenschutzbeauftragten des Trägers.
+8.3 Jeder Eintrag wird über eine SHA-256-Hash-Kette mit dem vorherigen Eintrag verbunden. Manipulation oder Löschung einzelner Einträge ist beim Export auffallend (Chain-Verifikation schlägt fehl) und kann vom Datenschutzbeauftragten geprüft werden.
+
+8.4 Das Audit-Log kann über die Einstellungen als JSON-Datei exportiert werden und dient als Nachweis für den Datenschutzbeauftragten des Trägers.
 
 9. TECHNISCHE UND ORGANISATORISCHE MASSNAHMEN
 
-• Verschlüsselung at Rest: AES-256-GCM für Zuordnungstabellen
+• Verschlüsselung at Rest: AES-256-CBC für Zuordnungstabellen und API-Keys (Hive HiveAesCipher), Schlüsselmaterial im OS-Keystore
 • Verschlüsselung in Transit: TLS 1.3 für API-Kommunikation
 • Datenminimierung: Nur anonymisierte Platzhalter-Texte an API
 • Zugriffskontrolle: Benutzer-Passphrase für Zuordnungstabelle

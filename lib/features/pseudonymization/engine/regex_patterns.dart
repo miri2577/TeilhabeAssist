@@ -1,9 +1,33 @@
 class RegexPatterns {
   RegexPatterns._();
 
-  /// Datumsformate: 01.01.2024, 01/01/2024, 1.1.24
+  /// Numerische Datumsformate: 01.01.2024, 01/01/2024, 1.1.24, 2024-03-15.
   static final date = RegExp(
-    r'\b(\d{1,2})[./](\d{1,2})[./](\d{2,4})\b',
+    r'\b('
+    // dd.MM.yyyy oder dd/MM/yyyy oder dd.MM.yy
+    r'\d{1,2}[./]\d{1,2}[./]\d{2,4}'
+    // ISO: yyyy-MM-dd
+    r'|\d{4}-\d{1,2}-\d{1,2}'
+    r')\b',
+  );
+
+  /// Datum mit Monatsnamen: "15. März 2024", "März 2024", "15 März 2024".
+  static final dateWithMonthName = RegExp(
+    r'\b(?:\d{1,2}\.?\s+)?'
+    r'(?:Januar|Februar|März|April|Mai|Juni|Juli|August|'
+    r'September|Oktober|November|Dezember|'
+    r'Jan|Feb|Mär|Mrz|Apr|Jun|Jul|Aug|Sep|Sept|Okt|Nov|Dez)'
+    r'\s+\d{2,4}\b',
+  );
+
+  /// Geburtsjahr im Kontext: "geboren 1985", "Jg. 1985", "Jahrgang 1985".
+  /// Reine Jahreszahlen außerhalb dieses Kontexts werden nicht erkannt,
+  /// um False Positives in Fließtext zu vermeiden.
+  static final birthYear = RegExp(
+    r'\b(?:geb(?:oren|\.|\s)|Jg\.|Jahrgang|geb\sam|Geburtsjahr[:\s])\s*'
+    r'(?:im\s+Jahr\s+)?'
+    r'(\d{4})\b',
+    caseSensitive: false,
   );
 
   /// Deutsche Telefonnummern: +49, 030, 0170, etc.
@@ -24,14 +48,11 @@ class RegexPatterns {
     caseSensitive: false,
   );
 
-  /// ICD-10-Codes: F20.0, G40.9 etc. – werden erkannt aber NICHT ersetzt
+  /// ICD-10-Codes: F20.0, G40.9, F33.1a — werden erkannt aber NICHT ersetzt.
+  /// Unterstützt optionale 4. Stelle (z.B. F33.1a) sowie reine 3-stellige
+  /// Codes ohne Punkt (z.B. M54).
   static final icd10 = RegExp(
-    r'\b[A-Z]\d{2}(?:\.\d{1,2})?\b',
-  );
-
-  /// Berliner Postleitzahlen im Adresskontext: 10115–14199
-  static final berlinPlz = RegExp(
-    r'\b(1(?:0[0-9]{3}|1[0-9]{3}|2[0-9]{3}|3[0-9]{3}|4[01][0-9]{2}))\b',
+    r'\b[A-TV-Z]\d{2}(?:\.\d{1,2}[a-z]?)?\b',
   );
 
   /// Adress-Pattern: "Straßenname Nr., PLZ Ort"

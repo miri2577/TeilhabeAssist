@@ -24,9 +24,11 @@ class UserDictionary {
 
   // --- Ausgeschlossene Wörter (kein Name) ---
 
+  /// Original-Schreibweise der ausgeschlossenen Wörter.
+  /// Der NameRecognizer normalisiert für den Lookup selbst auf lowercase.
   Set<String> get excludedWords {
     if (!isInitialized) return {};
-    return _excludeBox!.values.map((w) => w.toLowerCase()).toSet();
+    return _excludeBox!.values.toSet();
   }
 
   List<String> get excludedWordsList {
@@ -54,9 +56,12 @@ class UserDictionary {
 
   // --- Gelernte Namen (ist ein Name) ---
 
+  /// Original-Schreibweise der gelernten Namen.
+  /// Wichtig für das Phrase-Matching (z.B. "DASI Berlin gGmbH" als ganzes).
+  /// Der NameRecognizer normalisiert für den Lookup selbst auf lowercase.
   Set<String> get learnedNames {
     if (!isInitialized) return {};
-    return _includeBox!.values.map((w) => w.toLowerCase()).toSet();
+    return _includeBox!.values.toSet();
   }
 
   List<String> get learnedNamesList {

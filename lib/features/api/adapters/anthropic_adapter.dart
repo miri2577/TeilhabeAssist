@@ -4,24 +4,31 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../models/report_request.dart';
 import '../prompts/system_prompts.dart';
+import '../schemas/report_schemas.dart';
 import 'llm_adapter.dart';
 
 class AnthropicAdapter implements LLMAdapter {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.anthropic.com',
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
+  AnthropicAdapter() : _dio = _buildDio();
+  AnthropicAdapter.withDio(Dio dio) : _dio = dio;
+
+  final Dio _dio;
+
+  static Dio _buildDio() => Dio(BaseOptions(
+        baseUrl: 'https://api.anthropic.com',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 120),
+      ));
 
   @override
   String get name => 'Anthropic Claude';
 
   @override
-  String get defaultModel => 'claude-sonnet-4-20250514';
+  String get defaultModel => 'claude-sonnet-4-6';
 
   @override
-  List<String> get availableModels => [
-        'claude-sonnet-4-20250514',
+  List<String> get availableModels => const [
+        'claude-opus-4-7',
+        'claude-sonnet-4-6',
         'claude-haiku-4-5-20251001',
       ];
 
@@ -35,15 +42,24 @@ class AnthropicAdapter implements LLMAdapter {
 
     final data = response.data as Map<String, dynamic>;
     final content = data['content'] as List;
-    final text = content
-        .where((c) => c['type'] == 'text')
-        .map((c) => c['text'] as String)
-        .join();
+
+    // Strukturierter Tool-Use-Output bevorzugt — er ist schema-validiert.
+    Map<String, dynamic>? structured;
+    String text = '';
+    for (final c in content) {
+      if (c is! Map<String, dynamic>) continue;
+      if (c['type'] == 'tool_use' && c['name'] == ReportSchemas.toolName) {
+        final input = c['input'];
+        if (input is Map<String, dynamic>) structured = input;
+      } else if (c['type'] == 'text') {
+        text += c['text'] as String? ?? '';
+      }
+    }
 
     final usage = data['usage'] as Map<String, dynamic>;
-
     return ReportResponse(
       text: text,
+      structured: structured,
       inputTokens: usage['input_tokens'] as int,
       outputTokens: usage['output_tokens'] as int,
       model: data['model'] as String,
@@ -66,10 +82,15 @@ class AnthropicAdapter implements LLMAdapter {
     );
 
     final stream = response.data!.stream;
+    // Stream-Decoder: behält partielle Multi-Byte-Sequenzen über
+    // Chunk-Grenzen hinweg (utf8.decode würde bei einem geteilten Umlaut
+    // einen Fehler werfen).
+    final textStream =
+        const Utf8Decoder(allowMalformed: false).bind(stream);
     String buffer = '';
 
-    await for (final chunk in stream) {
-      buffer += utf8.decode(chunk);
+    await for (final chunk in textStream) {
+      buffer += chunk;
       final lines = buffer.split('\n');
       buffer = lines.removeLast(); // Unvollständige Zeile behalten
 
@@ -124,26 +145,10 @@ class AnthropicAdapter implements LLMAdapter {
       };
 
   Map<String, dynamic> _buildRequestBody(ReportRequest request) {
-    final userContent = StringBuffer();
-
-    if (request.pseudonymizedPreviousReport != null &&
-        request.pseudonymizedPreviousReport!.isNotEmpty) {
-      userContent.writeln('## VORBERICHT (pseudonymisiert):');
-      userContent.writeln(request.pseudonymizedPreviousReport);
-      userContent.writeln();
-    }
-
-    if (request.pseudonymizedReferenceReport != null &&
-        request.pseudonymizedReferenceReport!.isNotEmpty) {
-      userContent.writeln('## REFERENZ-BERICHT (zur stilistischen Orientierung, pseudonymisiert):');
-      userContent.writeln('Orientiere dich am Stil und Sprachduktus dieses Berichts.');
-      userContent.writeln(request.pseudonymizedReferenceReport);
-      userContent.writeln();
-    }
-
-    userContent.writeln('## AKTUELLE STICHPUNKTE:');
-    userContent.writeln(request.pseudonymizedNotes);
-
+    final schema = ReportSchemas.jsonSchemaFor(
+      request.reportType,
+      request.schema,
+    );
     return {
       'model': request.model,
       'max_tokens': 8000,
@@ -151,12 +156,22 @@ class AnthropicAdapter implements LLMAdapter {
       'system': [
         {
           'type': 'text',
-          'text': SystemPrompts.getPrompt(request.reportType),
+          'text': SystemPrompts.getPrompt(request.reportType, request.schema),
           'cache_control': {'type': 'ephemeral'},
         }
       ],
+      // Tool-Use erzwingt die strukturierte JSON-Antwort gemäß Schema.
+      // tool_choice mit type=tool zwingt Claude, exakt dieses Tool zu rufen.
+      'tools': [
+        {
+          'name': ReportSchemas.toolName,
+          'description': ReportSchemas.toolDescription,
+          'input_schema': schema,
+        }
+      ],
+      'tool_choice': {'type': 'tool', 'name': ReportSchemas.toolName},
       'messages': [
-        {'role': 'user', 'content': userContent.toString()},
+        {'role': 'user', 'content': request.buildUserContent()},
       ],
     };
   }

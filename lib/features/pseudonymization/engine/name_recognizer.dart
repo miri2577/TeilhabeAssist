@@ -21,8 +21,13 @@ class NameRecognizer {
   late final Set<String> _firstNamesLower;
   late final Set<String> _commonWordsLower;
 
-  /// Zusätzliche gelernte Namen (pro Session/Klient)
-  final Set<String> _learnedNames = {};
+  /// Gelernte Namen — lowercased, für Single-Word-Lookups (Stufe 3).
+  Set<String> _learnedNames = {};
+
+  /// Gelernte Namen — Originalschreibweise, für Multi-Token/Phrase-Match
+  /// (z.B. "DASI Berlin gGmbH"). Wird über Stufe 0 vor allen anderen
+  /// Mustern als hohe Konfidenz erkannt.
+  Set<String> _learnedPhrases = {};
 
   /// Vom Benutzer ausgeschlossene Wörter (kein Name)
   Set<String> _excludedWords = {};
@@ -45,11 +50,27 @@ class NameRecognizer {
     _commonWordsLower = kCommonWords.map((w) => w.toLowerCase()).toSet();
   }
 
-  void learnName(String name) => _learnedNames.add(name.toLowerCase());
+  void learnName(String name) {
+    _learnedNames.add(name.toLowerCase().trim());
+    _learnedPhrases.add(name.trim());
+  }
+
   void excludeWord(String word) => _excludedWords.add(word.toLowerCase());
-  void setExcludedWords(Set<String> words) => _excludedWords = words;
-  void setLearnedNames(Set<String> names) =>
-      _learnedNames.addAll(names);
+
+  /// Übernimmt die Excluded-Liste vollständig (replace, kein merge).
+  /// Damit wirken auch Löschungen aus dem User-Dictionary direkt.
+  void setExcludedWords(Set<String> words) =>
+      _excludedWords = words.map((w) => w.toLowerCase()).toSet();
+
+  /// Übernimmt die Learned-Liste vollständig (replace, kein merge).
+  /// Stellt zwei Repräsentationen bereit: lowercased für den
+  /// Single-Word-Lookup (Stufe 3 im findNames) und original-cased für
+  /// das Phrase-Matching mit Leerzeichen oder Sonderzeichen (Stufe 0).
+  void setLearnedNames(Set<String> names) {
+    final cleaned = names.where((n) => n.trim().isNotEmpty);
+    _learnedNames = cleaned.map((n) => n.toLowerCase().trim()).toSet();
+    _learnedPhrases = cleaned.map((n) => n.trim()).toSet();
+  }
 
   List<NameMatch> findNames(String text) {
     final matches = <NameMatch>[];
@@ -63,6 +84,34 @@ class NameRecognizer {
       if (!isOverlapping(m.start, m.end)) {
         matches.add(m);
         coveredRanges.add((m.start, m.end));
+      }
+    }
+
+    // 0. Höchste Priorität: gelernte Phrasen (Multi-Token, Sonderzeichen).
+    //    Matcht z.B. "DASI Berlin gGmbH" oder "Werkstätten der LeOcker"
+    //    als ganzes, case-insensitive. Sortiert nach Länge absteigend,
+    //    damit längere Phrasen Vorrang vor enthaltenen kürzeren haben.
+    final phrases = _learnedPhrases.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final phrase in phrases) {
+      if (phrase.isEmpty) continue;
+      // Word-boundary nur, wenn die Phrase mit Wortzeichen anfängt/endet.
+      // Sonst (z.B. wenn sie mit "(" beginnt) ohne Boundary matchen.
+      final startWord = RegExp(r'^\w').hasMatch(phrase);
+      final endWord = RegExp(r'\w$').hasMatch(phrase);
+      final pattern = RegExp(
+        '${startWord ? r'\b' : ''}'
+        '${RegExp.escape(phrase)}'
+        '${endWord ? r'\b' : ''}',
+        caseSensitive: false,
+      );
+      for (final match in pattern.allMatches(text)) {
+        addMatch(NameMatch(
+          text: match.group(0)!,
+          start: match.start,
+          end: match.end,
+          confidence: ConfidenceLevel.high,
+        ));
       }
     }
 

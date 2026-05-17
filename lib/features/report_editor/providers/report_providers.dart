@@ -45,48 +45,15 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
   }
 
   void updatePreviousReport(String text) {
-    if (state == null) return;
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: text,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: state!.modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state?.copyWith(previousReport: text);
   }
 
   void updateReferenceReport(String text) {
-    if (state == null) return;
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: text,
-      modules: state!.modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state?.copyWith(referenceReport: text);
   }
 
   void updateCurrentNotes(String notes) {
-    if (state == null) return;
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: notes,
-      referenceReport: state!.referenceReport,
-      modules: state!.modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state?.copyWith(currentNotes: notes);
   }
 
   void updateModuleNotes(String moduleId, String notes) {
@@ -95,17 +62,7 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
       if (m.id == moduleId) return m.copyWith(notes: notes);
       return m;
     }).toList();
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state!.copyWith(modules: modules);
   }
 
   void reorderModules(int oldIndex, int newIndex) {
@@ -114,50 +71,20 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
     if (newIndex > oldIndex) newIndex--;
     final item = modules.removeAt(oldIndex);
     modules.insert(newIndex, item);
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state!.copyWith(modules: modules);
   }
 
   void addModule(ReportModule module) {
     if (state == null) return;
-    final modules = [...state!.modules, module];
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
-    );
+    state = state!.copyWith(modules: [...state!.modules, module]);
   }
 
   void removeModule(String moduleId) {
     if (state == null) return;
     final module = state!.modules.firstWhere((m) => m.id == moduleId);
     if (module.type.required) return; // Pflichtmodule nicht entfernbar
-    final modules = state!.modules.where((m) => m.id != moduleId).toList();
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: modules,
-      generatedText: state!.generatedText,
-      pseudonymizedText: state!.pseudonymizedText,
+    state = state!.copyWith(
+      modules: state!.modules.where((m) => m.id != moduleId).toList(),
     );
   }
 
@@ -179,17 +106,70 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
   }
 
   void setGeneratedText(String text) {
+    state = state?.copyWith(generatedText: text);
+  }
+
+  /// Speichert einen generierten Text für eine bestimmte Schema-Variante.
+  /// Setzt zusätzlich `generatedText` für Rückwärtskompatibilität auf den
+  /// Text der aktuell ausgewählten Variante.
+  void setGeneratedTextForSchema(ReportSchema schema, String text) {
     if (state == null) return;
-    state = ReportDraft(
-      id: state!.id,
-      type: state!.type,
-      createdAt: state!.createdAt,
-      previousReport: state!.previousReport,
-      currentNotes: state!.currentNotes,
-      referenceReport: state!.referenceReport,
-      modules: state!.modules,
-      generatedText: text,
-      pseudonymizedText: state!.pseudonymizedText,
+    final updated = Map<ReportSchema, String>.from(state!.generatedTexts);
+    updated[schema] = text;
+    state = state!.copyWith(
+      generatedText: updated[state!.selectedSchema] ?? state!.generatedText,
+      generatedTexts: updated,
+    );
+  }
+
+  /// Speichert die strukturierte Map für eine Schema-Variante.
+  void setStructuredReportForSchema(
+    ReportSchema schema,
+    Map<String, dynamic> data,
+  ) {
+    if (state == null) return;
+    final updated =
+        Map<ReportSchema, Map<String, dynamic>>.from(state!.structuredReports);
+    updated[schema] = data;
+    state = state!.copyWith(structuredReports: updated);
+  }
+
+  /// Setzt einen einzelnen Stammdaten-Wert.
+  void updateStammdatenField(String key, String value) {
+    if (state == null) return;
+    final updated = Map<String, String>.from(state!.stammdaten);
+    if (value.trim().isEmpty) {
+      updated.remove(key);
+    } else {
+      updated[key] = value;
+    }
+    state = state!.copyWith(stammdaten: updated);
+  }
+
+  /// Mergt importierte Stammdaten (z.B. aus PDF-Import) in den Draft —
+  /// **ohne** bestehende Werte zu überschreiben.
+  int mergeStammdaten(Map<String, String> incoming) {
+    if (state == null || incoming.isEmpty) return 0;
+    final updated = Map<String, String>.from(state!.stammdaten);
+    var applied = 0;
+    incoming.forEach((k, v) {
+      final t = v.trim();
+      if (t.isEmpty) return;
+      if ((updated[k] ?? '').trim().isEmpty) {
+        updated[k] = t;
+        applied++;
+      }
+    });
+    if (applied == 0) return 0;
+    state = state!.copyWith(stammdaten: updated);
+    return applied;
+  }
+
+  void selectSchema(ReportSchema schema) {
+    if (state == null) return;
+    state = state!.copyWith(
+      selectedSchema: schema,
+      generatedText: state!.generatedTexts[schema] ?? state!.generatedText,
     );
   }
 }

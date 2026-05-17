@@ -220,6 +220,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 24),
 
+              // === BRANDING ===
+              _sectionTitle('Branding / Träger-Logo', theme),
+              _buildLogoCard(theme),
+              const SizedBox(height: 24),
+
               // === API ===
               _sectionTitle('API-Konfiguration', theme),
               Card(
@@ -513,6 +518,151 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildLogoCard(ThemeData theme) {
+    final logoBytes = ref.watch(customLogoProvider);
+    final logoName = ref.watch(customLogoNameProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Wird oben im PDF-Header angezeigt. Empfohlen: PNG/JPG, '
+              'transparent, mindestens 200×200 Pixel.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: logoBytes != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(7),
+                          child: Image.memory(
+                            logoBytes,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                          ),
+                        )
+                      : Icon(
+                          Icons.image_outlined,
+                          color: theme.colorScheme.onSurfaceVariant,
+                          size: 32,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        logoName ??
+                            (logoBytes != null ? 'Eigenes Logo' : 'Kein Logo'),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (logoBytes != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${(logoBytes.length / 1024).toStringAsFixed(1)} KB',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _pickLogo,
+                            icon: const Icon(Icons.upload, size: 18),
+                            label: Text(
+                                logoBytes == null ? 'Logo wählen' : 'Ersetzen'),
+                          ),
+                          if (logoBytes != null)
+                            OutlinedButton.icon(
+                              onPressed: _removeLogo,
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              label: const Text('Entfernen'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'jpg', 'jpeg'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Datei konnte nicht gelesen werden.')),
+        );
+      }
+      return;
+    }
+    if (bytes.length > 2 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Logo > 2 MB. Bitte kleineres Bild wählen (PNG, transparent, '
+              '≤ 500 px).',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    _settingsStorage.customLogo = bytes;
+    _settingsStorage.customLogoName = file.name;
+    ref.read(customLogoProvider.notifier).state = bytes;
+    ref.read(customLogoNameProvider.notifier).state = file.name;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logo "${file.name}" gespeichert')),
+      );
+    }
+  }
+
+  void _removeLogo() {
+    _settingsStorage.customLogo = null;
+    _settingsStorage.customLogoName = null;
+    ref.read(customLogoProvider.notifier).state = null;
+    ref.read(customLogoNameProvider.notifier).state = null;
   }
 
   Widget _sectionTitle(String title, ThemeData theme) {

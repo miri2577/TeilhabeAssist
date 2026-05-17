@@ -4,26 +4,33 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../models/report_request.dart';
 import '../prompts/system_prompts.dart';
+import '../schemas/report_schemas.dart';
 import 'llm_adapter.dart';
 
 class OpenAIAdapter implements LLMAdapter {
-  final Dio _dio = Dio(BaseOptions(
-    baseUrl: 'https://api.openai.com',
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
+  OpenAIAdapter() : _dio = _buildDio();
+  OpenAIAdapter.withDio(Dio dio) : _dio = dio;
+
+  final Dio _dio;
+
+  static Dio _buildDio() => Dio(BaseOptions(
+        baseUrl: 'https://api.openai.com',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 120),
+      ));
 
   @override
-  String get name => 'OpenAI GPT-4o';
+  String get name => 'OpenAI GPT';
 
   @override
-  String get defaultModel => 'gpt-5.4-2026-03-05';
+  String get defaultModel => 'gpt-5.4';
 
   @override
-  List<String> get availableModels => [
-        'gpt-5.4-2026-03-05',
-        'gpt-5.4-mini-2026-03-17',
-        'gpt-5.4-nano-2026-03-17',
+  List<String> get availableModels => const [
+        'gpt-5.5',
+        'gpt-5.4',
+        'gpt-5.4-mini',
+        'gpt-5.4-nano',
         'o3',
         'gpt-4o',
       ];
@@ -39,11 +46,21 @@ class OpenAIAdapter implements LLMAdapter {
     final data = response.data as Map<String, dynamic>;
     final choices = data['choices'] as List;
     final message = choices[0]['message'] as Map<String, dynamic>;
-    final text = message['content'] as String;
+    final rawContent = message['content'] as String;
     final usage = data['usage'] as Map<String, dynamic>;
 
+    // Mit response_format=json_schema ist content garantiert JSON.
+    Map<String, dynamic>? structured;
+    try {
+      final parsed = jsonDecode(rawContent);
+      if (parsed is Map<String, dynamic>) structured = parsed;
+    } catch (_) {
+      // Sollte mit strict-Schema nicht passieren — Fallback: Plain-Text.
+    }
+
     return ReportResponse(
-      text: text,
+      text: rawContent,
+      structured: structured,
       inputTokens: usage['prompt_tokens'] as int,
       outputTokens: usage['completion_tokens'] as int,
       model: data['model'] as String,
@@ -67,10 +84,15 @@ class OpenAIAdapter implements LLMAdapter {
     );
 
     final stream = response.data!.stream;
+    // Stream-Decoder: hält Multi-Byte-UTF-8-Sequenzen über Chunk-Grenzen
+    // hinweg zusammen (utf8.decode würde sonst bei einem geteilten Umlaut
+    // werfen).
+    final textStream =
+        const Utf8Decoder(allowMalformed: false).bind(stream);
     String buffer = '';
 
-    await for (final chunk in stream) {
-      buffer += utf8.decode(chunk);
+    await for (final chunk in textStream) {
+      buffer += chunk;
       final lines = buffer.split('\n');
       buffer = lines.removeLast();
 
@@ -113,35 +135,29 @@ class OpenAIAdapter implements LLMAdapter {
       };
 
   Map<String, dynamic> _buildRequestBody(ReportRequest request) {
-    final userContent = StringBuffer();
-
-    if (request.pseudonymizedPreviousReport != null &&
-        request.pseudonymizedPreviousReport!.isNotEmpty) {
-      userContent.writeln('## VORBERICHT (pseudonymisiert):');
-      userContent.writeln(request.pseudonymizedPreviousReport);
-      userContent.writeln();
-    }
-
-    if (request.pseudonymizedReferenceReport != null &&
-        request.pseudonymizedReferenceReport!.isNotEmpty) {
-      userContent.writeln('## REFERENZ-BERICHT (zur stilistischen Orientierung, pseudonymisiert):');
-      userContent.writeln('Orientiere dich am Stil und Sprachduktus dieses Berichts.');
-      userContent.writeln(request.pseudonymizedReferenceReport);
-      userContent.writeln();
-    }
-
-    userContent.writeln('## AKTUELLE STICHPUNKTE:');
-    userContent.writeln(request.pseudonymizedNotes);
-
+    final schema = ReportSchemas.jsonSchemaFor(
+      request.reportType,
+      request.schema,
+    );
     final body = <String, dynamic>{
       'model': request.model,
       'messages': [
         {
           'role': 'system',
-          'content': SystemPrompts.getPrompt(request.reportType),
+          'content':
+              SystemPrompts.getPrompt(request.reportType, request.schema),
         },
-        {'role': 'user', 'content': userContent.toString()},
+        {'role': 'user', 'content': request.buildUserContent()},
       ],
+      // Schema-gezwungene JSON-Antwort.
+      'response_format': {
+        'type': 'json_schema',
+        'json_schema': {
+          'name': ReportSchemas.toolName,
+          'strict': true,
+          'schema': schema,
+        },
+      },
     };
 
     // Neuere Modelle (gpt-5.x, o3) nutzen max_completion_tokens

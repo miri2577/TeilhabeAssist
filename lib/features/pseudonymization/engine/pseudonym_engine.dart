@@ -35,27 +35,33 @@ class PseudonymEngine {
     return '[${cat.prefix}_$num]';
   }
 
-  void _addMapping(
+  /// Fügt ein Mapping hinzu oder gibt das bestehende zurück, wenn das
+  /// gleiche (original, category) bereits gemappt ist. Liefert in beiden
+  /// Fällen den **richtigen** Platzhalter — wichtig, damit Aufrufer nicht
+  /// `_mappings.last.placeholder` lesen müssen (das wäre nach einem
+  /// Duplikat-Skip falsch, siehe Regression "Herr Frisch" → EINRICHTUNG).
+  String _addMapping(
     String original,
     PseudonymCategory category,
     ConfidenceLevel confidence,
     int start,
     int end,
   ) {
-    // Bei Duplikat: gleichen Platzhalter wiederverwenden
-    final existing = _mappings.where(
-      (m) => m.original == original && m.category == category,
-    );
-    if (existing.isNotEmpty) return;
-
+    for (final m in _mappings) {
+      if (m.original == original && m.category == category) {
+        return m.placeholder;
+      }
+    }
+    final placeholder = _nextPlaceholder(category);
     _mappings.add(PseudonymMapping(
-      placeholder: _nextPlaceholder(category),
+      placeholder: placeholder,
       original: original,
       category: category,
       confidence: confidence,
       startIndex: start,
       endIndex: end,
     ));
+    return placeholder;
   }
 
   /// Setzt die Engine komplett zurück
@@ -91,12 +97,18 @@ class PseudonymEngine {
       PseudonymCategory.aktenzeichen,
     );
 
-    // 3. Datumsformate
+    // 3. Datumsformate (numerisch, mit Monatsname, Geburtsjahr im Kontext)
     cleanText = _replaceByRegex(
       cleanText,
       RegexPatterns.date,
       PseudonymCategory.datum,
     );
+    cleanText = _replaceByRegex(
+      cleanText,
+      RegexPatterns.dateWithMonthName,
+      PseudonymCategory.datum,
+    );
+    cleanText = _replaceBirthYears(cleanText);
 
     // 4. Telefonnummern
     cleanText = _replaceByRegex(
@@ -155,10 +167,20 @@ class PseudonymEngine {
   List<String> validateAnonymization(String cleanText) {
     final issues = <String>[];
 
-    // Prüfe auf übrig gebliebene Datumsformate
+    // Prüfe auf übrig gebliebene Datumsformate (numerisch + Monatsname)
     for (final match in RegexPatterns.date.allMatches(cleanText)) {
       issues.add(
         'Mögliches Datum gefunden: "${match.group(0)}" – bitte prüfen',
+      );
+    }
+    for (final match in RegexPatterns.dateWithMonthName.allMatches(cleanText)) {
+      issues.add(
+        'Mögliches Datum gefunden: "${match.group(0)}" – bitte prüfen',
+      );
+    }
+    for (final match in RegexPatterns.birthYear.allMatches(cleanText)) {
+      issues.add(
+        'Mögliches Geburtsjahr: "${match.group(0)}" – bitte prüfen',
       );
     }
 
@@ -193,15 +215,43 @@ class PseudonymEngine {
           original.contains(RegExp(r'^[A-Z]\d'))) {
         return original;
       }
-      _addMapping(
+      return _addMapping(
         original,
         category,
         ConfidenceLevel.high,
         match.start,
         match.end,
       );
-      return _mappings.last.placeholder;
     });
+  }
+
+  /// Ersetzt das Jahr (Capture-Gruppe 1) im "geboren 1985"-Kontext durch
+  /// einen Platzhalter — der umgebende Anker ("geboren", "Jg.") bleibt
+  /// erhalten, damit der Bericht lesbar bleibt.
+  String _replaceBirthYears(String text) {
+    final matches = RegexPatterns.birthYear.allMatches(text).toList();
+    if (matches.isEmpty) return text;
+
+    final buffer = StringBuffer();
+    var cursor = 0;
+    for (final m in matches) {
+      buffer.write(text.substring(cursor, m.start));
+      final yearStart = m.start + m.group(0)!.indexOf(m.group(1)!);
+      final yearEnd = yearStart + m.group(1)!.length;
+      // Prefix (z.B. "geboren ") unverändert übernehmen
+      buffer.write(text.substring(m.start, yearStart));
+      final placeholder = _addMapping(
+        m.group(1)!,
+        PseudonymCategory.datum,
+        ConfidenceLevel.high,
+        yearStart,
+        yearEnd,
+      );
+      buffer.write(placeholder);
+      cursor = m.end;
+    }
+    buffer.write(text.substring(cursor));
+    return buffer.toString();
   }
 
   String _replaceAddresses(String text) {
@@ -211,18 +261,14 @@ class PseudonymEngine {
       ..sort((a, b) => b.start.compareTo(a.start));
 
     for (final match in sorted) {
-      _addMapping(
+      final placeholder = _addMapping(
         match.text,
         PseudonymCategory.adresse,
         match.confidence,
         match.start,
         match.end,
       );
-      text = text.replaceRange(
-        match.start,
-        match.end,
-        _mappings.last.placeholder,
-      );
+      text = text.replaceRange(match.start, match.end, placeholder);
     }
     return text;
   }
@@ -233,12 +279,7 @@ class PseudonymEngine {
       ..sort((a, b) => b.start.compareTo(a.start));
 
     for (final match in sorted) {
-      final category = match.confidence == ConfidenceLevel.high &&
-              match.text.contains(RegExp(
-                r'Arzt|Ärztin|Betreuer|Therapeut|Psychiater|Psycholog|Sozial',
-              ))
-          ? PseudonymCategory.behandler
-          : PseudonymCategory.person;
+      final category = _categorize(match);
 
       if (match.confidence == ConfidenceLevel.low) {
         _warnings.add(
@@ -246,20 +287,46 @@ class PseudonymEngine {
         );
       }
 
-      _addMapping(
+      final placeholder = _addMapping(
         match.text,
         category,
         match.confidence,
         match.start,
         match.end,
       );
-      text = text.replaceRange(
-        match.start,
-        match.end,
-        _mappings.last.placeholder,
-      );
+      text = text.replaceRange(match.start, match.end, placeholder);
     }
     return text;
+  }
+
+  /// Wählt die passende Kategorie für einen Namen-Match.
+  ///
+  /// - Sieht der Match wie eine Organisation/Einrichtung aus
+  ///   (GmbH, gGmbH, AG, e.V., Stiftung, Werkstatt, Gesellschaft, GbR, …),
+  ///   wird er als `einrichtung` markiert. Das ist für gelernte Phrasen
+  ///   wie "DASI Berlin gGmbH" entscheidend, damit sie als
+  ///   `[EINRICHTUNG_NNN]` und nicht als `[PERSON_NNN]` erscheinen.
+  /// - Steht im Match eine berufliche Rolle (Arzt, Therapeut, Sozial…),
+  ///   wird er als `behandler` markiert.
+  /// - Sonst: `person`.
+  PseudonymCategory _categorize(NameMatch match) {
+    final text = match.text;
+    if (RegExp(
+      r'\b(?:g?GmbH|AG|KGaA|UG|OHG|GbR|e\.\s*V\.?|gAG|'
+      r'Stiftung|Werkstatt|Werkstätten|Gesellschaft|Verein|'
+      r'Träger|Diakonie|Caritas|Klinik|Klinikum|Krankenhaus|'
+      r'Lebenshilfe)\b',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      return PseudonymCategory.einrichtung;
+    }
+    if (match.confidence == ConfidenceLevel.high &&
+        text.contains(RegExp(
+          r'Arzt|Ärztin|Betreuer|Therapeut|Psychiater|Psycholog|Sozial',
+        ))) {
+      return PseudonymCategory.behandler;
+    }
+    return PseudonymCategory.person;
   }
 
   String _replaceInstitutions(String text) {
@@ -273,14 +340,13 @@ class PseudonymEngine {
         caseSensitive: false,
       );
       text = text.replaceAllMapped(pattern, (match) {
-        _addMapping(
+        return _addMapping(
           match.group(0)!,
           PseudonymCategory.einrichtung,
           ConfidenceLevel.high,
           match.start,
           match.end,
         );
-        return _mappings.last.placeholder;
       });
     }
     return text;

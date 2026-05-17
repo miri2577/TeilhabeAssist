@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -10,6 +11,9 @@ import 'package:dio/dio.dart';
 import '../../core/storage/audit_log.dart';
 import '../api/models/report_request.dart';
 import '../api/providers/api_providers.dart';
+import '../api/schemas/canonical_words.dart';
+import '../api/schemas/json_reconstruct.dart';
+import '../api/schemas/report_markdown_renderer.dart';
 import '../privacy/privacy_policy_text.dart';
 import '../privacy/privacy_signature_screen.dart';
 import '../pseudonymization/engine/brp_page4_detector.dart';
@@ -24,6 +28,10 @@ import 'widgets/quality_panel.dart';
 
 enum GenerateStep { pseudonymize, review, generate, result }
 
+/// Mindest-Anzeigedauer der Preview, bevor die Bestätigung möglich ist.
+/// Verhindert reflexartiges Durchklicken ohne tatsächliche Sichtprüfung.
+const _kPreviewMinimumReadDuration = Duration(seconds: 5);
+
 class GenerateScreen extends ConsumerStatefulWidget {
   const GenerateScreen({super.key});
 
@@ -35,6 +43,9 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   GenerateStep _step = GenerateStep.pseudonymize;
   PseudonymResult? _pseudonymResult;
   bool _confirmed = false;
+  bool _acknowledgedWarnings = false;
+  bool _canConfirmYet = false;
+  Timer? _previewReadTimer;
   String _generatedText = '';
   bool _isStreaming = false;
   ReportResponse? _usageData;
@@ -44,6 +55,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
 
   @override
   void dispose() {
+    _previewReadTimer?.cancel();
     super.dispose();
   }
 
@@ -74,6 +86,12 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     final dictionary = ref.read(userDictionaryProvider);
     _engine!.loadUserDictionary(dictionary);
 
+    // Stammdaten als gelernte Phrasen: damit auch alternative Schreibweisen
+    // (z.B. "Vrislaff" im Vorbericht) auf dieselben Platzhalter gemappt
+    // werden. Die kanonische Schreibweise aus den Stammdaten wird im
+    // Reconstruct als Source-of-Truth verwendet.
+    _registerStammdatenAsLearnedNames(draft.stammdaten);
+
     // Referenz-Bericht ZUERST pseudonymisieren (eigene Platzhalter-Serie)
     if (draft.referenceReport.isNotEmpty) {
       final refResult = _engine!.pseudonymize(draft.referenceReport);
@@ -91,6 +109,111 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
     _pseudonymizedNotes = _pseudonymResult!.cleanText;
 
     setState(() => _step = GenerateStep.review);
+
+    // Pflicht-Lesedauer: Bestätigung erst nach kurzer Mindestzeit aktivieren
+    _previewReadTimer?.cancel();
+    _previewReadTimer = Timer(_kPreviewMinimumReadDuration, () {
+      if (mounted) setState(() => _canConfirmYet = true);
+    });
+  }
+
+  /// Trägt die Stammdaten-Werte als gelernte Phrasen in die Engine ein —
+  /// damit erkennt sie auch alternative Schreibweisen im Vorbericht und
+  /// mappt sie auf einen gemeinsamen Platzhalter. Beim Reconstruct kommt
+  /// die kanonische Schreibweise aus den Stammdaten zurück.
+  void _registerStammdatenAsLearnedNames(Map<String, String> stamm) {
+    const nameKeys = ['familienname', 'vorname', 'geburtsname'];
+    for (final k in nameKeys) {
+      final v = (stamm[k] ?? '').trim();
+      if (v.isEmpty) continue;
+      _engine!.learnName(v);
+      // Bei Doppelnamen ("Müller-Schmidt") auch die Einzelteile lernen
+      for (final part in v.split(RegExp(r'[\s\-]+'))) {
+        if (part.length >= 3) _engine!.learnName(part);
+      }
+    }
+  }
+
+  /// Rekonstruktion + Validierung für strukturierten Output:
+  /// Geht durch alle String-Werte der JSON-Map und ersetzt Platzhalter.
+  /// Rendert anschließend den Markdown-Text aus dem rekonstruierten JSON.
+  ({String text, String? error, Map<String, dynamic>? structured})
+      _reconstructStructuredAndRender(
+    ReportResponse response,
+    ReportSchema schema,
+  ) {
+    final draft = ref.read(reportDraftNotifierProvider);
+    final reportType = draft?.type ?? ReportType.informationsbericht;
+
+    final structured = response.structured;
+    if (structured == null) {
+      // Fallback: kein strukturierter Output → roher Text
+      var fallback = _stripAiClosingText(response.text);
+      if (_engine != null) fallback = _engine!.reconstruct(fallback);
+      return (text: fallback, error: null, structured: null);
+    }
+
+    // 1. Pseudonyme zurück-übersetzen (rekursiv durch das JSON)
+    var rebuilt = _engine != null
+        ? reconstructMap(structured, _engine!.reconstruct)
+        : structured;
+
+    // 1b. Großschreibungs-Korrektur: Behörden, Einrichtungen, Fachbegriffe
+    // werden zuverlässig großgeschrieben — egal wie das LLM sie ausgibt.
+    rebuilt = capitalizeMap(rebuilt);
+
+    // 2. Übrig gebliebene Platzhalter prüfen
+    final remaining = findRemainingPlaceholders(rebuilt);
+    String? error;
+    if (remaining.isNotEmpty) {
+      final preview = remaining.take(3).join(', ');
+      error = 'Rekonstruktion unvollständig: ${remaining.length} '
+          'Platzhalter konnten nicht aufgelöst werden ($preview). '
+          'Bericht NICHT exportieren!';
+    }
+
+    // 3. Markdown-Rendering aus dem strukturierten Objekt
+    final markdown =
+        ReportMarkdownRenderer.render(rebuilt, reportType, schema);
+    return (text: markdown, error: error, structured: rebuilt);
+  }
+
+  /// Baut den Preview-Payload **identisch** zu dem, was die LLM-Adapter
+  /// an die API senden — siehe `ReportRequest.buildUserContent`. Damit
+  /// sieht die Fachkraft die komplette User-Message inklusive aller
+  /// Trenner-Marker und sowohl Vorbericht als auch Referenzbericht.
+  ///
+  /// Die Mappings aus dem ursprünglichen `_pseudonymResult` werden an den
+  /// Preview-Result drangehängt, damit `HighlightedText` die Platzhalter
+  /// farblich markieren kann.
+  PseudonymResult _buildPreviewResult() {
+    final draft = ref.read(reportDraftNotifierProvider);
+    final reportType = draft?.type ?? ReportType.informationsbericht;
+    final request = ReportRequest(
+      apiKey: '',
+      model: '',
+      reportType: reportType,
+      pseudonymizedNotes: _pseudonymizedNotes ?? '',
+      pseudonymizedPreviousReport: _pseudonymizedPreviousReport,
+      pseudonymizedReferenceReport: _pseudonymizedReferenceReport,
+    );
+    return PseudonymResult(
+      cleanText: request.buildUserContent(),
+      mappings: _pseudonymResult?.mappings ?? const [],
+      warnings: _pseudonymResult?.warnings ?? const [],
+    );
+  }
+
+  /// Gibt zurück ob der Generate-Button freigegeben ist.
+  /// Bei vorhandenen Warnungen ist eine ZUSÄTZLICHE Bestätigung nötig
+  /// (doppeltes Häkchen), und die Mindest-Lesedauer muss abgelaufen sein.
+  bool get _canGenerate {
+    if (!_confirmed) return false;
+    if (!_canConfirmYet) return false;
+    final hasWarnings = (_pseudonymResult?.warnings.isNotEmpty ?? false) ||
+        _page4Warnings.isNotEmpty;
+    if (hasWarnings && !_acknowledgedWarnings) return false;
+    return true;
   }
 
 
@@ -124,59 +247,119 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
       final adapter = ref.read(llmAdapterProvider);
       final model = ref.read(selectedModelProvider);
 
-      final request = ReportRequest(
+      // Stammdaten ebenfalls pseudonymisieren, damit sie als "verbindliche
+      // Schreibweisen" im User-Content stehen — ohne Klarnamen an die API
+      // zu senden.
+      final pseudoStamm = <String, String>{};
+      currentDraft.stammdaten.forEach((k, v) {
+        if (v.trim().isEmpty) return;
+        // Schickt den Wert durch dieselbe Engine — Namen → Platzhalter
+        final res = _engine!.pseudonymize(v, keepMappings: true);
+        pseudoStamm[k] = res.cleanText.trim();
+      });
+
+      final baseRequest = ReportRequest(
         apiKey: apiKey,
         model: model,
         reportType: currentDraft.type,
         pseudonymizedNotes: _pseudonymizedNotes ?? _pseudonymResult!.cleanText,
         pseudonymizedPreviousReport: _pseudonymizedPreviousReport,
         pseudonymizedReferenceReport: _pseudonymizedReferenceReport,
+        pseudonymizedStammdaten: pseudoStamm,
       );
 
-      // Non-Streaming Aufruf – liefert echte Token-Usage-Daten
-      final response = await adapter.generateReport(request);
+      // Beide Schema-Varianten parallel generieren — Input-Tokens werden
+      // durch Anthropic-Prompt-Caching deduplikziert, nur Output zählt
+      // doppelt. UX-Vorteil: User kann beide direkt vergleichen.
+      final results = await Future.wait([
+        adapter.generateReport(
+          baseRequest.copyWith(schema: ReportSchema.ausfuehrlichTib),
+        ),
+        adapter.generateReport(
+          baseRequest.copyWith(schema: ReportSchema.kompaktOffiziell),
+        ),
+      ]);
 
       if (!mounted) return;
 
-      _generatedText = _stripAiClosingText(response.text);
-      _usageData = response;
+      final tibResponse = results[0];
+      final offiziellResponse = results[1];
+      _usageData = tibResponse; // Anzeige nur für die primäre Variante
 
-      // Rekonstruktion: Platzhalter durch Originaldaten ersetzen
-      // Nutzt die EINE Engine die ALLE Mappings kennt
-      var finalText = _generatedText;
-      if (_engine != null) {
-        finalText = _engine!.reconstruct(finalText);
+      final tibText = _reconstructStructuredAndRender(
+        tibResponse,
+        ReportSchema.ausfuehrlichTib,
+      );
+      final offiziellText = _reconstructStructuredAndRender(
+        offiziellResponse,
+        ReportSchema.kompaktOffiziell,
+      );
+
+      // Diagnose: Wenn keine strukturierte Map vom Adapter zurückkommt,
+      // hat das LLM Schema/Tool-Use ignoriert. Wir zeigen einen klaren
+      // Hinweis statt schweigend einen Markdown-Fallback zu liefern.
+      if (tibText.structured == null && offiziellText.structured == null) {
+        throw Exception(
+          'Der LLM-Adapter hat keinen strukturierten Output geliefert. '
+          'Modell: ${tibResponse.model}. '
+          'Bitte ein Modell mit Tool-Use-/JSON-Schema-Unterstützung wählen '
+          '(z.B. claude-sonnet-4-6, gpt-5.4 oder gpt-4o).',
+        );
       }
 
-      // F1: Validierung – Prüfe ob noch Platzhalter im Text
-      final remainingPlaceholders = RegExp(r'\[[A-Z]+_\d{3}\]');
-      if (remainingPlaceholders.hasMatch(finalText)) {
-        final matches = remainingPlaceholders.allMatches(finalText).toList();
-        _error = 'Rekonstruktion unvollständig: ${matches.length} Platzhalter '
-            'konnten nicht aufgelöst werden (${matches.take(3).map((m) => m.group(0)).join(", ")}). '
-            'Bericht NICHT exportieren!';
+      final notifier = ref.read(reportDraftNotifierProvider.notifier);
+      notifier.setGeneratedTextForSchema(
+        ReportSchema.ausfuehrlichTib,
+        tibText.text,
+      );
+      notifier.setGeneratedTextForSchema(
+        ReportSchema.kompaktOffiziell,
+        offiziellText.text,
+      );
+      if (tibText.structured != null) {
+        notifier.setStructuredReportForSchema(
+          ReportSchema.ausfuehrlichTib,
+          tibText.structured!,
+        );
       }
+      if (offiziellText.structured != null) {
+        notifier.setStructuredReportForSchema(
+          ReportSchema.kompaktOffiziell,
+          offiziellText.structured!,
+        );
+      }
+      // Legacy-Feld auf die aktive Variante zeigen lassen.
+      notifier.setGeneratedText(tibText.text);
 
-      ref.read(reportDraftNotifierProvider.notifier).setGeneratedText(finalText);
-
-      // Audit-Log: Berichtsgenerierung mit echten Kosten protokollieren
-      ref.read(auditLogProvider).log(AuditEvent.reportGenerated(
-        mappingCount: _pseudonymResult?.totalReplacements ?? 0,
-        model: response.model,
-        reportType: currentDraft.type.name,
-        inputTokens: response.inputTokens,
-        outputTokens: response.outputTokens,
-        costUsd: response.costUsd,
-      ));
-
+      // Wenn auch nur EINE Variante Probleme hat, zeige eine Warnung —
+      // aber blockiere den Export erst, wenn die aktiv angezeigte Variante
+      // betroffen ist.
       final draft = ref.read(reportDraftNotifierProvider);
+      final activeError = draft?.selectedSchema == ReportSchema.kompaktOffiziell
+          ? offiziellText.error
+          : tibText.error;
+      _error = activeError;
+
+      // Audit-Log: ein Eintrag pro tatsächlicher API-Generierung.
+      final auditLog = ref.read(auditLogProvider);
+      for (final r in results) {
+        auditLog.log(AuditEvent.reportGenerated(
+          mappingCount: _pseudonymResult?.totalReplacements ?? 0,
+          model: r.model,
+          reportType: currentDraft.type.name,
+          inputTokens: r.inputTokens,
+          outputTokens: r.outputTokens,
+          costUsd: r.costUsd,
+        ));
+      }
+
       _qualityIssues = QualityChecker.checkGeneratedText(
-        finalText,
+        draft?.activeGeneratedText ?? tibText.text,
         draft?.type ?? ReportType.informationsbericht,
       );
 
       setState(() {
-        _generatedText = finalText;
+        _generatedText = draft?.activeGeneratedText ?? tibText.text;
         _isStreaming = false;
         _step = GenerateStep.result;
       });
@@ -405,8 +588,8 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Gesamter Text der an die API gesendet wird '
-                  '(Notizen + Vorbericht, pseudonymisiert):',
+                  'Gesamter pseudonymisierter Text der an die API '
+                  'gesendet wird — vollständig, in der exakten Reihenfolge:',
                   style: theme.textTheme.labelMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -416,46 +599,19 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           ),
         ),
 
-        // Kompletter pseudonymisierter Text (Notizen + Vorbericht)
+        // Kompletter pseudonymisierter Payload (Vorbericht + Referenz +
+        // Notizen + Trenner-Marker) — identisch zu dem, was die Adapter
+        // als User-Message-Content an die API senden.
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(12)),
             ),
             child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Notizen (mit Highlighting)
-                  if (_pseudonymizedNotes != null &&
-                      _pseudonymizedNotes!.isNotEmpty) ...[
-                    Text('AKTUELLE NOTIZEN:',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        )),
-                    const SizedBox(height: 4),
-                    HighlightedText(result: _pseudonymResult!),
-                  ],
-                  // Vorbericht
-                  if (_pseudonymizedPreviousReport != null &&
-                      _pseudonymizedPreviousReport!.isNotEmpty) ...[
-                    const Divider(height: 24),
-                    Text('VORBERICHT:',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        )),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      _pseudonymizedPreviousReport!,
-                      style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
-                    ),
-                  ],
-                ],
-              ),
+              child: HighlightedText(result: _buildPreviewResult()),
             ),
           ),
         ),
@@ -464,17 +620,45 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         // Pflicht-Bestätigung
         CheckboxListTile(
           value: _confirmed,
-          onChanged: (v) => setState(() => _confirmed = v ?? false),
+          onChanged: _canConfirmYet
+              ? (v) => setState(() => _confirmed = v ?? false)
+              : null,
           controlAffinity: ListTileControlAffinity.leading,
-          title: const Text(
-            'Ich habe den Text geprüft und bestätige, dass keine '
-            'personenbezogenen Daten mehr enthalten sind.',
+          title: Text(
+            _canConfirmYet
+                ? 'Ich habe den Text Zeile für Zeile geprüft und bestätige, '
+                    'dass keine personenbezogenen Daten mehr enthalten sind.'
+                : 'Bitte den Text sorgfältig prüfen — Bestätigung in Kürze '
+                    'freigegeben.',
           ),
           tileColor: _confirmed
               ? Colors.green.withValues(alpha: 0.1)
               : Colors.orange.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
+
+        // Zweite Bestätigung — nur bei vorhandenen Warnungen
+        if ((_pseudonymResult?.warnings.isNotEmpty ?? false) ||
+            _page4Warnings.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _acknowledgedWarnings,
+            onChanged: (v) =>
+                setState(() => _acknowledgedWarnings = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text(
+              'Ich habe die Warnungen oben einzeln gelesen und bewertet. '
+              'Etwaige Restrisiken übernehme ich in meiner fachlichen '
+              'Verantwortung.',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            tileColor: _acknowledgedWarnings
+                ? Colors.green.withValues(alpha: 0.1)
+                : Colors.red.withValues(alpha: 0.08),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ],
         const SizedBox(height: 16),
 
         // Generate Button
@@ -490,7 +674,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
           const SizedBox(height: 12),
         ],
         FilledButton.icon(
-          onPressed: _confirmed ? _generate : null,
+          onPressed: _canGenerate ? _generate : null,
           icon: const Icon(Icons.auto_awesome),
           label: const Text('Bericht generieren'),
         ),
@@ -568,6 +752,11 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   }
 
   Widget _buildResultStep(ThemeData theme) {
+    final draft = ref.watch(reportDraftNotifierProvider);
+    final hasBothVariants = draft != null &&
+        draft.generatedTexts.length >= 2 &&
+        draft.generatedTexts.containsKey(ReportSchema.ausfuehrlichTib) &&
+        draft.generatedTexts.containsKey(ReportSchema.kompaktOffiziell);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -576,19 +765,66 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
             Icon(Icons.check_circle, color: Colors.green.shade700),
             const SizedBox(width: 8),
             Expanded(
-              child: Text('Bericht erfolgreich generiert',
-                  style: theme.textTheme.titleMedium),
+              child: Text(
+                hasBothVariants
+                    ? 'Bericht in zwei Varianten generiert'
+                    : 'Bericht erfolgreich generiert',
+                style: theme.textTheme.titleMedium,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         Text(
-          'Die Platzhalter wurden durch die Originaldaten ersetzt. '
-          'Bitte prüfe den Bericht sorgfältig vor dem Export.',
+          hasBothVariants
+              ? 'Du kannst zwischen der ausführlichen TIB-Variante und der '
+                  'kompakten Berliner Vorlage umschalten. Beide enthalten '
+                  'denselben Inhalt, in unterschiedlicher Strukturtiefe. '
+                  'Die aktuell aktive Variante wird auch im PDF-Export '
+                  'verwendet.'
+              : 'Die Platzhalter wurden durch die Originaldaten ersetzt. '
+                  'Bitte prüfe den Bericht sorgfältig vor dem Export.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (hasBothVariants) ...[
+          const SizedBox(height: 12),
+          SegmentedButton<ReportSchema>(
+            segments: const [
+              ButtonSegment(
+                value: ReportSchema.ausfuehrlichTib,
+                label: Text('Ausführlich (TIB)'),
+                icon: Icon(Icons.account_tree, size: 18),
+              ),
+              ButtonSegment(
+                value: ReportSchema.kompaktOffiziell,
+                label: Text('Kompakt (Berliner Vorlage)'),
+                icon: Icon(Icons.description, size: 18),
+              ),
+            ],
+            selected: {draft.selectedSchema},
+            onSelectionChanged: (set) {
+              final newSchema = set.first;
+              ref
+                  .read(reportDraftNotifierProvider.notifier)
+                  .selectSchema(newSchema);
+              setState(() {
+                _generatedText =
+                    draft.generatedTexts[newSchema] ?? _generatedText;
+                final remaining = RegExp(r'\[[A-Z]+_\d{3}\]');
+                _error = remaining.hasMatch(_generatedText)
+                    ? 'Rekonstruktion unvollständig in dieser Variante. '
+                        'Bericht NICHT exportieren!'
+                    : null;
+                _qualityIssues = QualityChecker.checkGeneratedText(
+                  _generatedText,
+                  draft.type,
+                );
+              });
+            },
+          ),
+        ],
         // Token-Kosten-Anzeige (echte Werte aus der API)
         if (_usageData != null) ...[
           const SizedBox(height: 12),

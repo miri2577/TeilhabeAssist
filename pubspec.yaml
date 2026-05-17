@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # State Management
   flutter_riverpod: ^2.6.1
@@ -19,6 +21,9 @@ dependencies:
   # Lokale Speicherung (verschlüsselt)
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+
+  # OS-Keystore (DPAPI / Keychain / Keystore) für Box-Encryption-Key
+  flutter_secure_storage: ^9.2.2
 
   # Kryptographie
   pointycastle: ^3.9.1
@@ -58,3 +63,4 @@ flutter:
   assets:
     - assets/templates/informationsbericht_101.pdf
     - assets/templates/mdb-ges_100_11_v12sp.pdf
+    - assets/templates/land_berlin_logo.jpg

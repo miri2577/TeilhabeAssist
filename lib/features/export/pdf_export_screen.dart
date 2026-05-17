@@ -7,10 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
+import '../api/providers/api_providers.dart';
 import '../report_editor/models/report_draft.dart';
 import '../report_editor/providers/report_providers.dart';
-import 'feedback_dialog.dart';
-import 'services/form_filler_service.dart';
 import 'services/pdf_generator.dart';
 
 class PdfExportScreen extends ConsumerStatefulWidget {
@@ -21,7 +20,6 @@ class PdfExportScreen extends ConsumerStatefulWidget {
 }
 
 class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
-  bool _feedbackShown = false;
   _ExportMode _mode = _ExportMode.professional;
   bool _generating = false;
   Uint8List? _pdfBytes;
@@ -107,20 +105,7 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Option 2: Original-Formular befüllen
-              _exportOption(
-                theme,
-                icon: Icons.edit_document,
-                title: 'Original-Formular befüllen',
-                subtitle: draft.type == ReportType.informationsbericht
-                    ? 'Informationsbericht v1.01 – Offizielles Berliner Formular'
-                    : 'BRP Ges 100 – Offizielles Berliner Formular',
-                selected: _mode == _ExportMode.formFill,
-                onTap: () => setState(() => _mode = _ExportMode.formFill),
-              ),
-              const SizedBox(height: 12),
-
-              // Option 3: TXT
+              // Option 2: TXT
               _exportOption(
                 theme,
                 icon: Icons.text_snippet_outlined,
@@ -131,7 +116,7 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Option 4: Zwischenablage
+              // Option 3: Zwischenablage
               _exportOption(
                 theme,
                 icon: Icons.copy,
@@ -141,7 +126,36 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
                 onTap: () => setState(() => _mode = _ExportMode.clipboard),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // Hinweis: kein automatisches Befüllen des Original-PDF
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerLow,
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.lightbulb_outline,
+                        color: theme.colorScheme.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Für die offizielle Berliner Vorlage: relevante '
+                        'Textstellen aus der Vorschau bzw. dem TXT-Export '
+                        'in das Original-PDF einfügen (Adobe Acrobat / '
+                        'PDF-Editor). Das eigene Layout enthält bereits '
+                        'alle Strukturen für Druck und Unterschrift.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
 
               SizedBox(
                 width: double.infinity,
@@ -237,29 +251,29 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
     try {
       final text = draft.generatedText!;
       final metadata = _buildMetadata(draft);
+      final logoBytes = ref.read(customLogoProvider);
 
       switch (_mode) {
         case _ExportMode.professional:
-          final bytes = await PdfGenerator.generateInformationsbericht(
-            generatedText: text,
-            metadata: metadata,
-          );
+          // Eigenes FEGH-Layout mit editierbaren AcroForm-Feldern —
+          // Personalien-Tabelle + Section-Bodies sind im PDF änderbar.
+          // Wenn ein Träger-Logo hinterlegt ist, erscheint es im Header.
+          final structured = draft.activeStructured;
+          final bytes = draft.type == ReportType.brp
+              ? await PdfGenerator.generateBrp(
+                  generatedText: text,
+                  metadata: metadata,
+                  structured: structured,
+                  logoBytes: logoBytes,
+                )
+              : await PdfGenerator.generateInformationsbericht(
+                  generatedText: text,
+                  metadata: metadata,
+                  structured: structured,
+                  logoBytes: logoBytes,
+                );
           setState(() => _pdfBytes = bytes);
 
-        case _ExportMode.formFill:
-          Uint8List bytes;
-          if (draft.type == ReportType.informationsbericht) {
-            bytes = await FormFillerService.fillInformationsbericht(
-              generatedText: text,
-              metadata: metadata,
-            );
-          } else {
-            bytes = await FormFillerService.fillBrp(
-              generatedText: text,
-              metadata: metadata,
-            );
-          }
-          setState(() => _pdfBytes = bytes);
 
         case _ExportMode.txt:
           final path = await FilePicker.platform.saveFile(
@@ -284,7 +298,6 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
           }
       }
 
-      _showFeedback();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -297,67 +310,47 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
   }
 
   Map<String, String> _buildMetadata(ReportDraft draft) {
-    // Metadaten aus den Modul-Notes extrahieren (Kopfdaten + Persondaten)
-    final kopf = draft.modules
-        .where((m) => m.type.name == 'kopfdaten')
-        .firstOrNull?.notes ?? '';
-    final person = draft.modules
-        .where((m) => m.type.name == 'persondaten')
-        .firstOrNull?.notes ?? '';
-
-    // Key-Value-Paare aus Freitext extrahieren (z.B. "Familienname: Müller")
-    final allText = '$kopf\n$person';
-    final fields = _parseKeyValueLines(allText);
-
-    final familienname = fields['familienname'] ?? fields['name'] ?? '';
-    final vorname = fields['vorname'] ?? fields['vornamen'] ?? '';
+    // Strukturierte Stammdaten direkt aus dem Draft — keine Freitext-
+    // Parserei mehr. Felder, die nicht gepflegt sind, bleiben leer
+    // und kommen im PDF als editierbare Leer-Felder an.
+    final s = draft.stammdaten;
+    final familienname = (s['familienname'] ?? '').trim();
+    final vorname = (s['vorname'] ?? '').trim();
     final fullName = familienname.isNotEmpty || vorname.isNotEmpty
         ? '$familienname, $vorname'.replaceAll(RegExp(r'^,\s*|,\s*$'), '')
-        : (person.isNotEmpty ? person.split('\n').first.trim() : '');
+        : '';
 
     return {
       'name': fullName,
-      'berichtszeitraum': fields['berichtszeitraum'] ??
-          _combineFields(fields, 'berichtszeitraum_von', 'berichtszeitraum_bis'),
-      'berichtszeitraum_von': fields['berichtszeitraum von'] ??
-          fields['berichtszeitraum_von'] ?? fields['von'] ?? '',
-      'berichtszeitraum_bis': fields['berichtszeitraum bis'] ??
-          fields['berichtszeitraum_bis'] ?? fields['bis'] ?? '',
-      'leistungstyp': fields['leistungstyp'] ?? draft.type.label,
-      'leistungserbringer': fields['leistungserbringer'] ?? fields['träger'] ?? '',
+      'berichtszeitraum': _combineFields(
+          s, 'berichtszeitraum_von', 'berichtszeitraum_bis'),
+      'berichtszeitraum_von': s['berichtszeitraum_von'] ?? '',
+      'berichtszeitraum_bis': s['berichtszeitraum_bis'] ?? '',
+      'leistungstyp': s['leistungstyp'] ?? '',
+      'leistungserbringer': s['leistungserbringer'] ?? '',
       'familienname': familienname,
       'vorname': vorname,
-      'geburtsdatum': fields['geburtsdatum'] ?? fields['geb'] ?? '',
-      'strasse': fields['straße'] ?? fields['strasse'] ?? fields['str'] ?? '',
-      'plz_ort': fields['plz_ort'] ?? _combineFields(fields, 'plz', 'ort'),
-      'plz': fields['plz'] ?? '',
-      'ort': fields['ort'] ?? '',
-      'telefon': fields['telefon'] ?? fields['tel'] ?? '',
-      'id_kostenuebernahme': fields['id kostenübernahme'] ??
-          fields['kostenübernahme'] ?? fields['id'] ?? '',
-      'kontakt_le': fields['e-mail'] ?? fields['email'] ??
-          fields['kontakt'] ?? fields['tel nr'] ?? '',
+      'titel': s['titel'] ?? '',
+      'anrede': s['anrede'] ?? '',
+      'geburtsname': s['geburtsname'] ?? '',
+      'geburtsdatum': s['geburtsdatum'] ?? '',
+      'geburtsort': s['geburtsort'] ?? '',
+      'geschlecht': s['geschlecht'] ?? '',
+      'familienstand': s['familienstand'] ?? '',
+      'strasse': s['strasse'] ?? '',
+      'hausnummer': s['hausnummer'] ?? '',
+      'weitere_adresse': s['weitere_adresse'] ?? '',
+      'plz_ort': _combineFields(s, 'plz', 'ort'),
+      'plz': s['plz'] ?? '',
+      'ort': s['ort'] ?? '',
+      'telefon_festnetz': s['telefon_festnetz'] ?? '',
+      'telefon_mobil': s['telefon_mobil'] ?? '',
+      'telefon': s['telefon_festnetz'] ?? s['telefon_mobil'] ?? '',
+      'email': s['email'] ?? '',
+      'id_kostenuebernahme': s['id_kostenuebernahme'] ?? '',
+      'kontakt_le': s['kontakt_le'] ?? '',
+      'teilhabefachdienst': s['teilhabefachdienst'] ?? '',
     };
-  }
-
-  /// Parst Zeilen wie "Schlüssel: Wert" oder "Schlüssel = Wert" in eine Map.
-  Map<String, String> _parseKeyValueLines(String text) {
-    final result = <String, String>{};
-    for (final line in text.split('\n')) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-
-      // "Schlüssel: Wert" oder "Schlüssel = Wert"
-      final match = RegExp(r'^([^:=]{2,30})\s*[:=]\s*(.+)$').firstMatch(trimmed);
-      if (match != null) {
-        final key = match.group(1)!.trim().toLowerCase();
-        final value = match.group(2)!.trim();
-        if (value.isNotEmpty) {
-          result[key] = value;
-        }
-      }
-    }
-    return result;
   }
 
   String _combineFields(Map<String, String> fields, String a, String b) {
@@ -374,18 +367,6 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
     return 'Bericht_$date.$ext';
   }
 
-  void _showFeedback() {
-    if (_feedbackShown) return;
-    _feedbackShown = true;
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => const FeedbackDialog(),
-        );
-      }
-    });
-  }
 }
 
-enum _ExportMode { professional, formFill, txt, clipboard }
+enum _ExportMode { professional, txt, clipboard }

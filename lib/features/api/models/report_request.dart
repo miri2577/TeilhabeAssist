@@ -4,24 +4,90 @@ class ReportRequest {
   final String apiKey;
   final String model;
   final ReportType reportType;
+  final ReportSchema schema;
   final String pseudonymizedNotes;
   final String? pseudonymizedPreviousReport;
   final String? pseudonymizedReferenceReport;
   final double temperature;
 
+  /// Pseudonymisierte Stammdaten als "verbindliche Schreibweisen".
+  /// Werden im User-Content als kurze Tabelle oben angefügt — damit das
+  /// LLM nicht aus dem Vorbericht abweichende Schreibweisen übernimmt.
+  final Map<String, String> pseudonymizedStammdaten;
+
   const ReportRequest({
     required this.apiKey,
     required this.model,
     required this.reportType,
+    this.schema = ReportSchema.ausfuehrlichTib,
     required this.pseudonymizedNotes,
     this.pseudonymizedPreviousReport,
     this.pseudonymizedReferenceReport,
+    this.pseudonymizedStammdaten = const {},
     this.temperature = 0.3,
   });
+
+  ReportRequest copyWith({ReportSchema? schema}) => ReportRequest(
+        apiKey: apiKey,
+        model: model,
+        reportType: reportType,
+        schema: schema ?? this.schema,
+        pseudonymizedNotes: pseudonymizedNotes,
+        pseudonymizedPreviousReport: pseudonymizedPreviousReport,
+        pseudonymizedReferenceReport: pseudonymizedReferenceReport,
+        pseudonymizedStammdaten: pseudonymizedStammdaten,
+        temperature: temperature,
+      );
+
+  /// Zentral gebauter User-Message-Content, der **identisch** an Anthropic
+  /// und OpenAI als Nutzerteil des Prompts gesendet wird. Der Generate-
+  /// Screen verwendet diese Methode auch für die Pflicht-Preview, damit
+  /// die Fachkraft 1:1 sieht, was das Gerät verlässt.
+  String buildUserContent() {
+    final buffer = StringBuffer();
+
+    if (pseudonymizedStammdaten.isNotEmpty) {
+      buffer.writeln(
+        '## VERBINDLICHE STAMMDATEN — diese Schreibweisen sind im Bericht '
+        'durchgängig zu verwenden, auch wenn der Vorbericht abweichende '
+        'Varianten enthält:',
+      );
+      pseudonymizedStammdaten.forEach((key, value) {
+        buffer.writeln('- $key: $value');
+      });
+      buffer.writeln();
+    }
+
+    if (pseudonymizedPreviousReport != null &&
+        pseudonymizedPreviousReport!.isNotEmpty) {
+      buffer.writeln('## VORBERICHT (pseudonymisiert):');
+      buffer.writeln(pseudonymizedPreviousReport);
+      buffer.writeln();
+    }
+
+    if (pseudonymizedReferenceReport != null &&
+        pseudonymizedReferenceReport!.isNotEmpty) {
+      buffer.writeln(
+        '## REFERENZ-BERICHT (zur stilistischen Orientierung, '
+        'pseudonymisiert):',
+      );
+      buffer.writeln(
+        'Orientiere dich am Stil und Sprachduktus dieses Berichts.',
+      );
+      buffer.writeln(pseudonymizedReferenceReport);
+      buffer.writeln();
+    }
+
+    buffer.writeln('## AKTUELLE STICHPUNKTE:');
+    buffer.writeln(pseudonymizedNotes);
+
+    return buffer.toString();
+  }
 }
 
 class ReportResponse {
   final String text;
+  final Map<String, dynamic>? structured;
   final int inputTokens;
   final int outputTokens;
   final String model;
@@ -30,6 +96,7 @@ class ReportResponse {
 
   const ReportResponse({
     required this.text,
+    this.structured,
     required this.inputTokens,
     required this.outputTokens,
     required this.model,

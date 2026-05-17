@@ -1,11 +1,21 @@
 import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
 
-/// Verschlüsseltes Audit-Log für alle sicherheitsrelevanten Aktionen.
-/// Enthält KEINE personenbezogenen Daten – nur Metadaten.
-/// Dient als Nachweis für Datenschutz-Audits und Compliance.
+/// Audit-Log für sicherheitsrelevante Aktionen.
+///
+/// Jeder Eintrag enthält einen `prev_hash` und einen `hash` über
+/// `SHA-256(prev_hash || canonical_json(payload))`. Damit ist nachträgliche
+/// Manipulation einzelner Einträge erkennbar — das Re-Berechnen der Kette
+/// schlägt fehl, sobald ein Eintrag editiert oder gelöscht wurde.
+///
+/// Enthält KEINE personenbezogenen Daten — nur Metadaten und Zeitstempel.
 class AuditLog {
   static const _boxName = 'audit_log';
+  static const _genesisHash =
+      '0000000000000000000000000000000000000000000000000000000000000000';
+
   Box<String>? _box;
 
   Future<void> init() async {
@@ -14,19 +24,23 @@ class AuditLog {
 
   bool get isInitialized => _box != null && _box!.isOpen;
 
-  /// Neuen Log-Eintrag schreiben
+  /// Neuen Log-Eintrag schreiben — bildet die Hash-Chain fort.
   Future<void> log(AuditEvent event) async {
     if (!isInitialized) return;
-    final entry = {
+    final prevHash = _lastHash();
+    final payload = <String, dynamic>{
       'timestamp': DateTime.now().toIso8601String(),
       'action': event.action,
       'details': event.details,
       'userName': event.userName,
+      'prev_hash': prevHash,
     };
-    await _box!.add(jsonEncode(entry));
+    final hash = _hashPayload(payload);
+    payload['hash'] = hash;
+    await _box!.add(jsonEncode(payload));
   }
 
-  /// Alle Log-Einträge (neueste zuerst)
+  /// Alle Log-Einträge (neueste zuerst).
   List<Map<String, dynamic>> getAll() {
     if (!isInitialized) return [];
     return _box!.values
@@ -36,11 +50,36 @@ class AuditLog {
         .toList();
   }
 
-  /// Log als JSON exportieren (für Datenschutzbeauftragte)
+  /// Prüft die komplette Hash-Chain. `null` = OK, sonst Fehler-Beschreibung.
+  String? verifyChain() {
+    if (!isInitialized) return null;
+    String prev = _genesisHash;
+    var index = 0;
+    for (final raw in _box!.values) {
+      final entry = jsonDecode(raw) as Map<String, dynamic>;
+      final storedHash = entry.remove('hash') as String?;
+      if (storedHash == null) {
+        return 'Eintrag $index ohne Hash (Legacy-Format)';
+      }
+      if (entry['prev_hash'] != prev) {
+        return 'Eintrag $index: prev_hash bricht die Kette';
+      }
+      final expected = _hashPayload(entry);
+      if (expected != storedHash) {
+        return 'Eintrag $index: Hash stimmt nicht — Manipulation möglich';
+      }
+      prev = storedHash;
+      index++;
+    }
+    return null;
+  }
+
+  /// Log als JSON exportieren (für Datenschutzbeauftragte).
   String exportToJson() {
     return jsonEncode({
       'appName': 'TeilhabeAssist',
       'exportedAt': DateTime.now().toIso8601String(),
+      'chainValid': verifyChain() == null,
       'entries': getAll(),
     });
   }
@@ -50,6 +89,34 @@ class AuditLog {
   Future<void> close() async {
     await _box?.close();
     _box = null;
+  }
+
+  String _lastHash() {
+    if (_box!.isEmpty) return _genesisHash;
+    final lastRaw = _box!.getAt(_box!.length - 1);
+    if (lastRaw == null) return _genesisHash;
+    final last = jsonDecode(lastRaw) as Map<String, dynamic>;
+    return (last['hash'] as String?) ?? _genesisHash;
+  }
+
+  static String _hashPayload(Map<String, dynamic> payload) {
+    // Kanonische JSON-Serialisierung: Keys sortiert, damit Hash deterministisch.
+    final canonical = _canonicalJson(payload);
+    return sha256.convert(utf8.encode(canonical)).toString();
+  }
+
+  static String _canonicalJson(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.map((k) => k.toString()).toList()..sort();
+      final parts = keys.map(
+        (k) => '${jsonEncode(k)}:${_canonicalJson(value[k])}',
+      );
+      return '{${parts.join(',')}}';
+    }
+    if (value is Iterable) {
+      return '[${value.map(_canonicalJson).join(',')}]';
+    }
+    return jsonEncode(value);
   }
 }
 
