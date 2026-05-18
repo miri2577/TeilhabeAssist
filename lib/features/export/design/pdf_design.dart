@@ -407,18 +407,17 @@ pw.Widget buildEditableBlock({
   double? maxHeight,
 }) {
   final t = defaultValue.trim();
-  // Realistische Höhen-Schätzung:
+  // Höhe eng an Inhalt anpassen, damit kein Leerraum im PDF entsteht.
   //   • Zeile bei 10.5 pt + lineSpacing 3 ≈ 14.5 pt
-  //   • bei A4-Seitenbreite minus Margins (≈495 pt nutzbar) und 10.5 pt
-  //     Schrift passen je nach Buchstaben ~55–65 Zeichen pro Zeile —
-  //     konservativ mit 58 rechnen, damit nichts abgeschnitten wird.
-  //   • Pro `\n`-Zeichen zusätzlich eine Pflicht-Zeile addieren.
-  //   • Großzügiger Sicherheitsaufschlag (+25%) für Umbruch-Effekte.
+  //   • bei A4-Seitenbreite minus Margins passen ~70 Zeichen pro Zeile.
+  //   • explizite `\n` als feste Zeilenumbrüche zählen.
+  //   • Kein zusätzlicher Sicherheits-Multiplier — der Acrobat Reader
+  //     scrollt das TextField intern, falls der Inhalt minimal überlauft.
   final explicitBreaks = '\n'.allMatches(t).length;
-  final wrappedLines = (t.length / 58).ceil();
+  final wrappedLines = (t.length / 70).ceil();
   final rawLines = wrappedLines + explicitBreaks;
-  final lines = (rawLines * 1.25).ceil().clamp(t.isEmpty ? 3 : 5, 200);
-  final height = (lines * 14.5 + 16).clamp(minHeight, maxHeight ?? 680.0);
+  final lines = rawLines.clamp(t.isEmpty ? 2 : 3, 200);
+  final height = (lines * 14.5 + 10).clamp(minHeight, maxHeight ?? 680.0);
   return pw.Container(
     width: double.infinity,
     height: height,
@@ -456,6 +455,65 @@ pw.Widget buildEditableInline({
       defaultValue: t,
       textStyle: pw.TextStyle(fontSize: 10, color: PdfDesignTokens.text),
     ),
+  );
+}
+
+/// Variante von `buildEditableKeyValueTable`, deren Wert-Zellen multiline
+/// sind und ihre Höhe an die Textlänge anpassen.
+///
+/// Die Werte-Spalte ist ca. 70 % der Seitenbreite. Bei 10.5 pt Schrift
+/// passen dort ungefähr 40 Zeichen pro Zeile — diese Schätzung wird zur
+/// Zellenhöhe verrechnet. So werden lange Leitziele oder Indikatoren
+/// nicht mehr nach der ersten Zeile abgeschnitten.
+pw.Widget buildEditableMultilineKeyValueTable(
+  List<({String label, String fieldName, String value, double minHeight})>
+      entries,
+) {
+  final rows = <pw.TableRow>[];
+  for (final e in entries) {
+    final value = e.value.trim();
+    final explicitBreaks = '\n'.allMatches(value).length;
+    final wrapped = (value.length / 50).ceil();
+    final lines = (wrapped + explicitBreaks).clamp(value.isEmpty ? 1 : 1, 30);
+    final h = (lines * 14.5 + 8).clamp(e.minHeight, 360.0);
+
+    rows.add(pw.TableRow(children: [
+      pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        color: PdfDesignTokens.tableHeader,
+        child: pw.Text(
+          e.label,
+          style: pw.TextStyle(
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfDesignTokens.text,
+          ),
+        ),
+      ),
+      pw.Container(
+        height: h,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: pw.TextField(
+          name: e.fieldName,
+          value: value,
+          defaultValue: value,
+          fieldFlags: const {pdf.PdfFieldFlags.multiline},
+          textStyle: pw.TextStyle(
+            fontSize: 10,
+            lineSpacing: 3,
+            color: PdfDesignTokens.text,
+          ),
+        ),
+      ),
+    ]));
+  }
+  return pw.Table(
+    border: pw.TableBorder.all(color: PdfDesignTokens.divider, width: 0.5),
+    columnWidths: const {
+      0: pw.FlexColumnWidth(1.2),
+      1: pw.FlexColumnWidth(3),
+    },
+    children: rows,
   );
 }
 

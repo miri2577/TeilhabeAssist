@@ -94,26 +94,71 @@ class PdfGenerator {
       pw.SizedBox(height: 28),
     ];
 
-    for (var i = 0; i < sections.length; i++) {
-      final section = sections[i];
-      final number = _roman(i + 2);
-      final isTeilhabeziele = _isTeilhabezieleSection(section.title) &&
-          structured != null &&
-          (structured['teilhabeziele'] is List) &&
-          (structured['teilhabeziele'] as List).isNotEmpty;
+    // Wenn die strukturierte Schema-Map vorhanden ist (Informationsbericht
+    // Kompakt oder TIB), rendern wir jede Sub-Sektion eigenständig — pro
+    // Schema-Key ein eigenes TextField mit passender Höhe. Das verhindert
+    // Roh-Markdown-Inhalt im Fließtext und liefert sauber strukturierte
+    // Editierfelder.
+    final hasStructuredAllgemein = structured != null &&
+        structured['allgemeine_informationen'] is Map;
+    final hasStructuredZiele = structured != null &&
+        (structured['teilhabeziele'] is List) &&
+        (structured['teilhabeziele'] as List).isNotEmpty;
+    final hasStructuredAssistenz = structured != null &&
+        structured['assistenzleistungen'] is Map;
+    final hasStructuredZusammenfassung = structured != null &&
+        structured['zusammenfassung'] is Map;
+    final useStructured = hasStructuredAllgemein ||
+        hasStructuredZiele ||
+        hasStructuredAssistenz ||
+        hasStructuredZusammenfassung;
 
-      if (isTeilhabeziele) {
+    if (useStructured) {
+      var n = 2;
+      // Jede Hauptsektion startet auf einer neuen Seite — Section I
+      // (Angaben zur Person) bleibt als „Deckblatt" auf Seite 1.
+      if (hasStructuredAllgemein) {
+        children.add(pw.NewPage());
+        children.addAll(_renderAllgemeineInfoStructured(
+          number: _roman(n++),
+          sectionTitle: 'Allgemeine Informationen zur Lebenssituation',
+          info: Map<String, dynamic>.from(
+              structured['allgemeine_informationen'] as Map),
+        ));
+      }
+      if (hasStructuredZiele) {
+        children.add(pw.NewPage());
         children.addAll(_renderTeilhabezieleStructured(
-          number: number,
-          sectionTitle: section.title,
+          number: _roman(n++),
+          sectionTitle: 'Bericht zu vereinbarten Teilhabezielen',
           ziele: List<Map<String, dynamic>>.from(
               (structured['teilhabeziele'] as List).whereType<Map>()),
         ));
-      } else {
-        // Heading + Spacer in einem kleinen atomaren Wrap — verhindert
-        // dass eine Section-Überschrift alleine am Seitenende landet.
-        // Der eigentliche TextField-Body folgt splittbar darunter, damit
-        // lange Inhalte korrekt auf mehrere Seiten paginieren.
+      }
+      if (hasStructuredAssistenz) {
+        children.add(pw.NewPage());
+        children.addAll(_renderAssistenzleistungenStructured(
+          number: _roman(n++),
+          sectionTitle: 'Assistenzleistungen',
+          assistenz: Map<String, dynamic>.from(
+              structured['assistenzleistungen'] as Map),
+        ));
+      }
+      if (hasStructuredZusammenfassung) {
+        children.add(pw.NewPage());
+        children.addAll(_renderZusammenfassungStructured(
+          number: _roman(n++),
+          sectionTitle: 'Zusammenfassung und Ausblick',
+          zus: Map<String, dynamic>.from(
+              structured['zusammenfassung'] as Map),
+        ));
+      }
+    } else {
+      // Fallback: Markdown-Sections-Pfad (z.B. BRP oder wenn keine
+      // strukturierte Map vorhanden ist).
+      for (var i = 0; i < sections.length; i++) {
+        final section = sections[i];
+        final number = _roman(i + 2);
         children.add(_atomic([
           buildSectionHeading(number, section.title),
           pw.SizedBox(height: 12),
@@ -123,8 +168,8 @@ class PdfGenerator {
           defaultValue: section.body.trim(),
           minHeight: 120,
         ));
+        children.add(pw.SizedBox(height: 24));
       }
-      children.add(pw.SizedBox(height: 24));
     }
 
     children
@@ -156,11 +201,6 @@ class PdfGenerator {
   //   Strukturierter Teilhabeziele-Renderer
   // ──────────────────────────────────────────────────────────────────
 
-  static bool _isTeilhabezieleSection(String title) {
-    final t = title.toLowerCase();
-    return t.contains('teilhabeziel') || t.contains('zielerreichung');
-  }
-
   /// Rendert die Teilhabeziele-Sektion als Folge eigenständiger Goal-
   /// Blöcke. Jedes Ziel bekommt:
   ///   • Sub-Heading "Teilhabeziel N"
@@ -191,6 +231,10 @@ class PdfGenerator {
     );
 
     for (var idx = 0; idx < ziele.length; idx++) {
+      // Goals separieren wir nicht mehr mit `pw.NewPage()` — das hat
+      // zuvor Leerseiten produziert. Mit der jetzt engeren Höhen-
+      // Heuristik landet jedes Ziel meistens auf einer eigenen Seite
+      // bzw. teilt sich sauber mit dem nächsten.
       final ziel = ziele[idx];
       final n = idx + 1;
       final leitziel = (ziel['leitziel'] ?? '').toString().trim();
@@ -210,7 +254,8 @@ class PdfGenerator {
               : ziel.containsKey('umfang_unterstuetzung')
                   ? 'Umfang Unterstützung'
                   : 'Indikator';
-      final grad = (ziel['zielerreichungsgrad'] ?? '').toString().trim();
+      final grad =
+          _displayZielerreichung((ziel['zielerreichungsgrad'] ?? '').toString().trim());
 
       // Erläuterung — Kompakt: `erlaeuterung_zielerreichung`,
       // TIB: `sicht_leistungserbringer`.
@@ -253,21 +298,24 @@ class PdfGenerator {
       atomicHead.addAll([
         _zielSubHeading(n),
         pw.SizedBox(height: 8),
-        buildEditableKeyValueTable([
+        buildEditableMultilineKeyValueTable([
           (
             label: 'Leitziel',
             fieldName: 'ziel_${n}_leitziel',
             value: leitziel,
+            minHeight: 40.0,
           ),
           (
             label: indikatorLabel,
             fieldName: 'ziel_${n}_indikator',
             value: indikator,
+            minHeight: 40.0,
           ),
           (
             label: 'Zielerreichungsgrad',
             fieldName: 'ziel_${n}_zielerreichungsgrad',
             value: grad,
+            minHeight: 24.0,
           ),
         ]),
       ]);
@@ -319,12 +367,183 @@ class PdfGenerator {
         _subLabel('Abweichende Sicht der leistungsberechtigten Person'),
         pw.SizedBox(height: 6),
       ]));
+      // Leerer Wert → "nein" als sinnvoller Default. So bleibt das
+      // Feld nicht visuell leer, und der Inhalt deckt sich mit der
+      // Markdown-Ansicht in der App.
       widgets.add(buildEditableBlock(
         name: 'ziel_${n}_abweichende_sicht',
-        defaultValue: abweichend,
-        minHeight: 70,
+        defaultValue: abweichend.isEmpty ? 'nein' : abweichend,
+        minHeight: 50,
       ));
       widgets.add(pw.SizedBox(height: 22));
+    }
+    return widgets;
+  }
+
+  /// Wandelt den `zielerreichungsgrad`-Enum in lesbaren Text.
+  static String _displayZielerreichung(String v) {
+    return switch (v) {
+      'voll_erreicht' => 'voll erreicht',
+      'teilweise_erreicht' => 'teilweise erreicht',
+      'nicht_erreicht' => 'nicht erreicht',
+      'nicht_beurteilbar' => 'nicht beurteilbar',
+      _ => v,
+    };
+  }
+
+  /// Wandelt den `fls_empfehlung`-Enum in lesbaren Text.
+  static String _displayFls(String v) {
+    return switch (v) {
+      'erhoehung' => 'Erhöhung empfohlen',
+      'beibehaltung' => 'Beibehaltung empfohlen',
+      'reduktion' => 'Reduktion empfohlen',
+      'keine_aussage' => 'Keine Aussage',
+      _ => v,
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  //   Strukturierte Sub-Renderer für Allgemeine Info / Assistenz /
+  //   Zusammenfassung — je Sub-Schema-Key ein eigenes TextField.
+  // ──────────────────────────────────────────────────────────────────
+
+  /// Rendert „Allgemeine Informationen zur Lebenssituation" gegliedert in
+  /// die drei Sub-Felder aus `_allgemeineInformationen`.
+  /// Heading + erste Sub-Section sind atomar (Anti-Orphan).
+  static List<pw.Widget> _renderAllgemeineInfoStructured({
+    required String number,
+    required String sectionTitle,
+    required Map<String, dynamic> info,
+  }) {
+    return _renderStructuredBlocks(
+      number: number,
+      sectionTitle: sectionTitle,
+      blocks: [
+        (
+          label: 'Ausbildung, Arbeit und sonstige Tagesstruktur',
+          field: 'allg_ausbildung_arbeit',
+          value: (info['ausbildung_arbeit_tagesstruktur'] ?? '').toString(),
+        ),
+        (
+          label: 'Bedeutsame Kontakte',
+          field: 'allg_bedeutsame_kontakte',
+          value: (info['bedeutsame_kontakte'] ?? '').toString(),
+        ),
+        (
+          label: 'Sozialraum und weitere Informationen',
+          field: 'allg_sozialraum',
+          value: (info['sozialraum_und_weiteres'] ?? '').toString(),
+        ),
+      ],
+    );
+  }
+
+  /// Rendert „Assistenzleistungen" gegliedert in FLS-Übersicht, Nacht-
+  /// Erreichbarkeit (Ja/Nein) und besondere Vorkommnisse.
+  static List<pw.Widget> _renderAssistenzleistungenStructured({
+    required String number,
+    required String sectionTitle,
+    required Map<String, dynamic> assistenz,
+  }) {
+    final nacht = assistenz['erreichbarkeit_nacht'];
+    final nachtText = nacht == true
+        ? 'Ja'
+        : nacht == false
+            ? 'Nein'
+            : (nacht ?? '').toString();
+    return _renderStructuredBlocks(
+      number: number,
+      sectionTitle: sectionTitle,
+      blocks: [
+        (
+          label: 'Übersicht der erbrachten Fachleistungsstunden',
+          field: 'assistenz_fls_uebersicht',
+          value: (assistenz['fachleistungsstunden_uebersicht'] ?? '').toString(),
+        ),
+        (
+          label: 'Erreichbarkeit in der Nacht',
+          field: 'assistenz_nacht',
+          value: nachtText,
+        ),
+        (
+          label: 'Besondere Vorkommnisse',
+          field: 'assistenz_vorkommnisse',
+          value: (assistenz['besondere_vorkommnisse'] ?? '').toString(),
+        ),
+      ],
+    );
+  }
+
+  /// Rendert „Zusammenfassung und Ausblick" gegliedert in
+  /// Gesamteinschätzung, Empfehlung, FLS-Empfehlung (Enum + Begründung).
+  static List<pw.Widget> _renderZusammenfassungStructured({
+    required String number,
+    required String sectionTitle,
+    required Map<String, dynamic> zus,
+  }) {
+    final flsEnum = (zus['fls_empfehlung'] ?? '').toString().trim();
+    final flsLabel = _displayFls(flsEnum);
+    final flsBegruendung = (zus['fls_begruendung'] ?? '').toString().trim();
+    final flsValue = flsLabel.isEmpty
+        ? flsBegruendung
+        : flsBegruendung.isEmpty
+            ? flsLabel
+            : '$flsLabel — $flsBegruendung';
+
+    return _renderStructuredBlocks(
+      number: number,
+      sectionTitle: sectionTitle,
+      blocks: [
+        (
+          label: 'Gesamteinschätzung der Teilhabesituation',
+          field: 'zus_gesamteinschaetzung',
+          value: (zus['gesamteinschaetzung'] ?? '').toString(),
+        ),
+        (
+          label: 'Empfehlung für den kommenden Leistungszeitraum',
+          field: 'zus_empfehlung',
+          value: (zus['empfehlung_kommender_zeitraum'] ?? '').toString(),
+        ),
+        (
+          label: 'Anpassung der Fachleistungsstunden',
+          field: 'zus_fls',
+          value: flsValue,
+        ),
+      ],
+    );
+  }
+
+  /// Gemeinsame Render-Routine: Section-Heading + Folge benannter Blöcke.
+  /// Heading + Label des ersten Blocks werden in einem `_atomic` gebündelt,
+  /// damit die Section-Überschrift nicht ohne Folgeinhalt am Seitenende
+  /// steht. Body-TextFields sind splittbar — lange Inhalte paginieren
+  /// sauber über mehrere Seiten.
+  static List<pw.Widget> _renderStructuredBlocks({
+    required String number,
+    required String sectionTitle,
+    required List<({String label, String field, String value})> blocks,
+  }) {
+    final widgets = <pw.Widget>[];
+    for (var i = 0; i < blocks.length; i++) {
+      final b = blocks[i];
+      final atomicHead = <pw.Widget>[];
+      if (i == 0) {
+        atomicHead.addAll([
+          buildSectionHeading(number, sectionTitle),
+          pw.SizedBox(height: 14),
+        ]);
+      }
+      atomicHead.addAll([
+        _subLabel(b.label),
+        pw.SizedBox(height: 6),
+      ]);
+      widgets.add(_atomic(atomicHead));
+      widgets.add(buildEditableBlock(
+        name: b.field,
+        defaultValue: b.value.trim(),
+        minHeight: 70,
+      ));
+      widgets.add(pw.SizedBox(height: 14));
     }
     return widgets;
   }
