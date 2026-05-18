@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:teilhabe_assist/app.dart';
+import 'package:teilhabe_assist/core/audit/audit_context.dart';
 import 'package:teilhabe_assist/core/storage/audit_log.dart';
 import 'package:teilhabe_assist/core/storage/settings_storage.dart';
 import 'package:teilhabe_assist/core/theme/app_settings_provider.dart';
@@ -36,6 +37,17 @@ void main() async {
 
   final auditLog = AuditLog();
   await auditLog.init();
+
+  // Kontextfelder (Device-ID, App-Version, Hostname) für jeden
+  // Audit-Eintrag — MUSS nach Hive-Init laufen.
+  await AuditContext.init();
+
+  // Wenn die Datenschutzerklärung schon unterzeichnet ist, übernehmen
+  // wir den Nutzer-Namen für künftige Audit-Einträge.
+  final existingSignature = signatureStore.currentSignature;
+  if (existingSignature != null) {
+    AuditContext.setCurrentUserName(existingSignature.fullName);
+  }
 
   final appSettingsNotifier = AppSettingsNotifier();
   await appSettingsNotifier.init();

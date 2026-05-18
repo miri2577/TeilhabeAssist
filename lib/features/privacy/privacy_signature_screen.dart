@@ -1,6 +1,13 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../core/audit/audit_context.dart';
+import '../../core/storage/audit_log.dart';
+import '../api/providers/api_providers.dart';
 import 'privacy_policy_text.dart';
 import 'signature_store.dart';
 
@@ -39,10 +46,25 @@ class _PrivacySignatureScreenState
 
     try {
       final store = ref.read(signatureStoreProvider);
+      final fullName = _nameController.text.trim();
       await store.saveConfirmation(
-        fullName: _nameController.text.trim(),
+        fullName: fullName,
         policyText: kPrivacyPolicyText,
       );
+
+      // Audit-Kontext: User-Name in alle weiteren Logs übernehmen
+      AuditContext.setCurrentUserName(fullName);
+
+      // Audit-Event mit policyHash schreiben — beweist, welche Version
+      // der Datenschutzerklärung unterzeichnet wurde.
+      final policyHash = sha256
+          .convert(utf8.encode(kPrivacyPolicyText))
+          .toString();
+      final auditLog = ref.read(auditLogProvider);
+      await auditLog.log(AuditEvent.signatureCreated(
+        userName: fullName,
+        policyHash: policyHash,
+      ));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

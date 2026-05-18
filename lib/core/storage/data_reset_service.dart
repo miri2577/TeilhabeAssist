@@ -29,8 +29,14 @@ class DataResetService {
   ];
 
   /// Boxen die NIEMALS gelöscht werden dürfen (defensiv).
+  /// - `audit_log`: forensischer Nachweis, gesetzlich erforderlich
+  /// - `audit_context`: Device-ID muss persistent bleiben, damit Logs
+  ///   nach dem Reset noch dem selben Gerät zugeordnet werden können
+  /// - `audit_keys`: Träger-Signatur-Schlüsselpaar (Public-Key-Teil)
   static const List<String> _protectedBoxes = [
     'audit_log',
+    'audit_context',
+    'audit_keys',
   ];
 
   /// Anzahl der zu löschenden Boxen (für die UI).

@@ -1,7 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
+
+import '../audit/audit_context.dart';
+import '../audit/audit_keys.dart';
 
 /// Audit-Log für sicherheitsrelevante Aktionen.
 ///
@@ -25,6 +29,10 @@ class AuditLog {
   bool get isInitialized => _box != null && _box!.isOpen;
 
   /// Neuen Log-Eintrag schreiben — bildet die Hash-Chain fort.
+  ///
+  /// Kontextfelder (`deviceId`, `appVersion`, `hostname`, `userName`)
+  /// werden automatisch aus `AuditContext` ergänzt — sie sind für die
+  /// forensische Auswertung essentiell und gehören in JEDEN Eintrag.
   Future<void> log(AuditEvent event) async {
     if (!isInitialized) return;
     final prevHash = _lastHash();
@@ -32,7 +40,13 @@ class AuditLog {
       'timestamp': DateTime.now().toIso8601String(),
       'action': event.action,
       'details': event.details,
-      'userName': event.userName,
+      'userName': event.userName ??
+          (AuditContext.currentUserName.isEmpty
+              ? null
+              : AuditContext.currentUserName),
+      'deviceId': AuditContext.deviceId,
+      'appVersion': AuditContext.appVersion,
+      'hostname': AuditContext.hostname,
       'prev_hash': prevHash,
     };
     final hash = _hashPayload(payload);
@@ -78,10 +92,51 @@ class AuditLog {
   String exportToJson() {
     return jsonEncode({
       'appName': 'TeilhabeAssist',
+      'appVersion': AuditContext.appVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'chainValid': verifyChain() == null,
       'entries': getAll(),
     });
+  }
+
+  /// Signierter JSON-Export — Detached-Ed25519-Signatur über das
+  /// kanonisch serialisierte Payload-JSON.
+  ///
+  /// Format:
+  /// ```json
+  /// {
+  ///   "appName": "...", "appVersion": "...", "exportedAt": "...",
+  ///   "chainValid": true, "entries": [...],
+  ///   "algorithm": "Ed25519", "publicKey": "<b64>",
+  ///   "publicKeyFingerprint": "AA:BB:...",
+  ///   "signature": "<b64>"
+  /// }
+  /// ```
+  ///
+  /// Wirft `StateError` wenn kein Audit-Schlüssel konfiguriert ist —
+  /// dann muss der Caller auf `exportToJson()` (unsigniert) ausweichen.
+  Future<String> exportSigned() async {
+    final pubB64 = await AuditKeys.getPublicKeyB64();
+    final fingerprint = await AuditKeys.getFingerprint();
+    if (pubB64 == null || fingerprint == null) {
+      throw StateError('Kein Audit-Schlüssel konfiguriert.');
+    }
+    final payload = <String, dynamic>{
+      'appName': 'TeilhabeAssist',
+      'appVersion': AuditContext.appVersion,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'chainValid': verifyChain() == null,
+      'algorithm': 'Ed25519',
+      'publicKey': pubB64,
+      'publicKeyFingerprint': fingerprint,
+      'entries': getAll(),
+    };
+    final canonical = _canonicalJson(payload);
+    final signature = await AuditKeys.sign(
+      Uint8List.fromList(utf8.encode(canonical)),
+    );
+    payload['signature'] = base64Encode(signature);
+    return jsonEncode(payload);
   }
 
   int get entryCount => _box?.length ?? 0;
@@ -151,8 +206,39 @@ class AuditEvent {
     },
   );
 
-  static AuditEvent signatureCreated({required String userName}) =>
-      AuditEvent(action: 'signature_created', userName: userName);
+  static AuditEvent signatureCreated({
+    required String userName,
+    String? policyHash,
+  }) =>
+      AuditEvent(
+        action: 'signature_created',
+        userName: userName,
+        details: policyHash == null ? null : {'policyHash': policyHash},
+      );
+
+  static AuditEvent keyRotated({
+    required String oldFingerprint,
+    required String newFingerprint,
+  }) =>
+      AuditEvent(
+        action: 'key_rotated',
+        details: {
+          'oldFingerprint': oldFingerprint,
+          'newFingerprint': newFingerprint,
+        },
+      );
+
+  static AuditEvent keyImported({required String fingerprint}) =>
+      AuditEvent(
+        action: 'key_imported',
+        details: {'fingerprint': fingerprint},
+      );
+
+  static AuditEvent keyGenerated({required String fingerprint}) =>
+      AuditEvent(
+        action: 'key_generated',
+        details: {'fingerprint': fingerprint},
+      );
 
   static AuditEvent passwordSet() =>
       const AuditEvent(action: 'password_set');

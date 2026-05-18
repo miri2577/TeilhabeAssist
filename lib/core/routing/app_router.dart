@@ -8,6 +8,7 @@ import 'package:teilhabe_assist/features/report_editor/generate_screen.dart';
 import 'package:teilhabe_assist/features/report_editor/report_editor_screen.dart';
 import 'package:teilhabe_assist/features/privacy/privacy_signature_screen.dart';
 import 'package:teilhabe_assist/features/settings/audit_log_screen.dart';
+import 'package:teilhabe_assist/features/settings/audit_setup_screen.dart';
 import 'package:teilhabe_assist/features/settings/dictionary_screen.dart';
 import 'package:teilhabe_assist/features/settings/prompt_editor_screen.dart';
 import 'package:teilhabe_assist/features/help/help_screen.dart';
@@ -66,6 +67,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/audit-log',
       builder: (context, state) => const AuditLogScreen(),
+    ),
+    GoRoute(
+      path: '/audit-setup',
+      builder: (context, state) => const AuditSetupScreen(),
     ),
     GoRoute(
       path: '/help',

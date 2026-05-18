@@ -50,6 +50,8 @@ dependencies:
   uuid: ^4.5.1
   crypto: ^3.0.7
   cupertino_icons: ^1.0.8
+  package_info_plus: ^9.0.1
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:

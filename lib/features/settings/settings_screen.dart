@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/audit/audit_keys.dart';
 import '../../core/storage/audit_log.dart';
 import '../../core/storage/data_reset_service.dart';
 import '../../core/storage/settings_storage.dart';
@@ -415,9 +416,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       leading: const Icon(Icons.receipt_long_outlined),
                       title: const Text('Audit-Log exportieren'),
                       subtitle: const Text(
-                          'JSON-Export für DSB / Aufsichtsbehörde'),
+                          'JSON-Export für DSB / Aufsichtsbehörde '
+                          '(Ed25519-signiert falls Schlüssel eingerichtet)'),
                       onTap: _exportAuditLog,
                     ),
+                    const Divider(height: 1),
+                    _AuditKeysTile(),
                   ],
                 ),
               ),
@@ -481,16 +485,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _exportAuditLog() async {
     final auditLog = ref.read(auditLogProvider);
-    final json = auditLog.exportToJson();
+    final hasKey = await AuditKeys.hasKeyPair();
+    final String json;
+    final bool signed;
+    try {
+      if (hasKey) {
+        json = await auditLog.exportSigned();
+        signed = true;
+      } else {
+        json = auditLog.exportToJson();
+        signed = false;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export fehlgeschlagen: $e')),
+      );
+      return;
+    }
     final path = await FilePicker.platform.saveFile(
       dialogTitle: 'Audit-Log exportieren',
-      fileName: 'teilhabe_audit_${DateTime.now().toIso8601String().substring(0, 10)}.json',
+      fileName: 'teilhabe_audit_'
+          '${DateTime.now().toIso8601String().substring(0, 10)}.json',
     );
     if (path == null) return;
     await File(path).writeAsString(json);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Audit-Log exportiert (${auditLog.entryCount} Einträge)')),
+        SnackBar(
+          content: Text(
+            signed
+                ? 'Signierter Audit-Log exportiert (${auditLog.entryCount} '
+                    'Einträge, Ed25519)'
+                : 'Audit-Log exportiert (${auditLog.entryCount} Einträge, '
+                    'unsigniert — Audit-Schlüssel nicht eingerichtet)',
+          ),
+        ),
       );
     }
   }
@@ -718,6 +748,193 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           'Basiert auf dem Teilhabeinstrument Berlin (TIB), '
           'ICF-Klassifikation und dem Berliner Rahmenvertrag '
           'Eingliederungshilfe (BRV EGH).',
+    );
+  }
+}
+
+
+class _AuditKeysTile extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_AuditKeysTile> createState() => _AuditKeysTileState();
+}
+
+class _AuditKeysTileState extends ConsumerState<_AuditKeysTile> {
+  bool _loading = true;
+  bool _hasKey = false;
+  String? _fingerprint;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final has = await AuditKeys.hasKeyPair();
+    final fp = await AuditKeys.getFingerprint();
+    if (!mounted) return;
+    setState(() {
+      _hasKey = has;
+      _fingerprint = fp;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const ListTile(
+        leading: Icon(Icons.verified_user_outlined),
+        title: Text('Audit-Schlüssel'),
+        subtitle: Text('Status wird geprüft…'),
+      );
+    }
+    if (!_hasKey) {
+      return ListTile(
+        leading: const Icon(Icons.verified_user_outlined),
+        title: const Text('Audit-Schlüssel einrichten'),
+        subtitle: const Text(
+            'Ed25519-Signatur für externe Verifikation des Audit-Logs '
+            '(empfohlen vom DSB)'),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () async {
+          await context.push('/audit-setup');
+          if (!mounted) return;
+          _refresh();
+        },
+      );
+    }
+    return ListTile(
+      leading: Icon(Icons.verified_user, color: Colors.green.shade700),
+      title: const Text('Audit-Schlüssel aktiv'),
+      subtitle: Text('Fingerprint: ${_fingerprint ?? "—"}'),
+      trailing: PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (action) async {
+          switch (action) {
+            case 'export_pub':
+              await _exportPublicPem();
+            case 'rotate':
+              await _confirmRotate();
+            case 'remove':
+              await _confirmRemove();
+          }
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(
+            value: 'export_pub',
+            child: ListTile(
+              leading: Icon(Icons.upload_file),
+              title: Text('Public Key exportieren'),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'rotate',
+            child: ListTile(
+              leading: Icon(Icons.refresh),
+              title: Text('Schlüssel rotieren'),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'remove',
+            child: ListTile(
+              leading: Icon(Icons.delete_outline, color: Colors.red),
+              title: Text('Schlüssel entfernen',
+                  style: TextStyle(color: Colors.red)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportPublicPem() async {
+    final pem = await AuditKeys.getPublicKeyPem();
+    if (pem == null) return;
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Public Key speichern',
+      fileName: 'traeger_public.pem',
+      type: FileType.custom,
+      allowedExtensions: ['pem'],
+    );
+    if (path == null) return;
+    await File(path).writeAsString(pem);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Public Key gespeichert.')),
+    );
+  }
+
+  Future<void> _confirmRotate() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.refresh, color: Colors.orange.shade700, size: 48),
+        title: const Text('Schlüssel rotieren?'),
+        content: const Text(
+          'Der bestehende private Schlüssel wird durch einen neuen ersetzt. '
+          'Alte Exports bleiben mit dem alten Public Key prüfbar — neue '
+          'Exports werden mit dem neuen Schlüssel signiert.\n\n'
+          'Empfohlen nur bei Verdacht auf Kompromittierung.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Rotieren'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final oldFp = await AuditKeys.getFingerprint() ?? '';
+    final result = await AuditKeys.rotate();
+    final auditLog = ref.read(auditLogProvider);
+    await auditLog.log(AuditEvent.keyRotated(
+      oldFingerprint: oldFp,
+      newFingerprint: result.fingerprint,
+    ));
+    if (!mounted) return;
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Neuer Fingerprint: ${result.fingerprint}')),
+    );
+  }
+
+  Future<void> _confirmRemove() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.delete_outline, color: Colors.red.shade700, size: 48),
+        title: const Text('Schlüssel entfernen?'),
+        content: const Text(
+          'Künftige Exports werden nicht mehr signiert. Alte signierte '
+          'Exports bleiben prüfbar — vorausgesetzt der Public Key wurde '
+          'separat gesichert.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Entfernen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await AuditKeys.delete();
+    if (!mounted) return;
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Audit-Schlüssel entfernt.')),
     );
   }
 }
