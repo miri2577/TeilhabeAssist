@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/storage/audit_log.dart';
 import '../../core/storage/data_reset_service.dart';
 import '../../core/storage/settings_storage.dart';
 import '../../core/theme/app_settings_provider.dart';
@@ -507,6 +508,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           '• Alle gespeicherten Vorlagen\n'
           '• Die Datenschutz-Unterschrift\n'
           '• Alle Einstellungen\n\n'
+          'Erhalten bleibt:\n'
+          '• Das Audit-Log (forensischer Nachweis, gesetzlich erforderlich) '
+          '— wird mit einem Eintrag „Daten zurückgesetzt" fortgeschrieben.\n\n'
           'Die App wird danach neu gestartet.',
         ),
         actions: [
@@ -518,10 +522,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await DataResetService.resetAll();
+              // Audit-Event ZUERST schreiben — danach könnte der Schreib-
+              // Zugriff fehlschlagen, falls Hive-State unklar ist.
+              final auditLog = ref.read(auditLogProvider);
+              await auditLog.log(const AuditEvent(
+                action: 'data_reset',
+                details: {
+                  'protectedBoxes': ['audit_log'],
+                },
+              ));
+              final deletedCount = await DataResetService.resetAll();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Alle Daten gelöscht. Bitte App neu starten.')),
+                SnackBar(
+                  content: Text(
+                    '$deletedCount Datenspeicher gelöscht. Audit-Log '
+                    'erhalten. Bitte App neu starten.',
+                  ),
+                ),
               );
             },
             child: const Text('Endgültig löschen'),
