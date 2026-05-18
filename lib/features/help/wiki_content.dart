@@ -33,8 +33,7 @@ const wikiArticles = <WikiArticle>[
 
 TeilhabeAssist ist eine KI-gestützte Desktop-Anwendung für Fachkräfte der **Eingliederungshilfe in Berlin**. Die App unterstützt bei der Erstellung von:
 
-- **Informationsberichten** (Version 1.01)
-- **Behandlungs- und Rehabilitationsplänen** (BRP, 4. Berliner Fassung)
+- **Informationsberichten** (Berliner Vorlage, Version 1.01)
 
 ## Das Grundprinzip
 
@@ -116,7 +115,7 @@ Im Pseudonymisierungs-Test (Hauptmenü → Pseudonymisierung testen) sehen Sie f
     id: 'pdf-import',
     title: 'PDF-Import',
     icon: Icons.picture_as_pdf,
-    tags: ['pdf', 'import', 'vorbericht', 'formular', 'drag', 'drop', 'brp'],
+    tags: ['pdf', 'import', 'vorbericht', 'formular', 'drag', 'drop'],
     markdown: '''
 # PDF-Import
 
@@ -124,8 +123,7 @@ TeilhabeAssist kann PDF-Dateien direkt importieren und die relevanten Inhalte ex
 
 ## Unterstützte Formate
 
-- **Berliner BRP-Formulare** (Ges 100) — Formularfelder werden automatisch ausgelesen
-- **Informationsberichte** (v1.01) — Formularfelder und Freitext
+- **Informationsberichte** (Berliner Vorlage v1.01) — Formularfelder und Freitext
 - **Andere PDFs** — Seitentext wird extrahiert
 - **Textdateien** (.txt, .md) — Direkt importiert
 
@@ -137,23 +135,11 @@ Ziehen Sie die PDF-Datei direkt in das Importfeld der App.
 ### Per Datei-Dialog
 Klicken Sie auf "PDF auswählen" und wählen Sie die Datei aus.
 
-## Was wird aus den PDFs gelesen?
-
-Bei **Berliner BRP-Formularen** liest die App die Formularfelder (Textfelder) von Seite 5-11 aus. Das sind die Seiten mit dem eigentlichen Berichtsinhalt:
-- Bericht über bisherige Entwicklung
-- Fähigkeiten und Ressourcen
-- Ziele und Maßnahmen
-- Indikatoren und Vorgehen
-
-**Seite 4 (Psychiatrische Anamnese/Krankengeschichte)** wird bewusst NICHT importiert, da diese vertraulich ist und nicht an den Kostenträger weitergeleitet werden darf.
-
 ## Technischer Hintergrund
 
 Die App nutzt zwei Methoden zur Textextraktion:
 1. **Appearance-Stream-Parser** — Liest den gerenderten Text direkt aus den PDF-Zeichenbefehlen. Funktioniert auch bei speziellen Font-Encodings.
 2. **Formularfeld-API** — Liest die Formularfeld-Werte als Fallback.
-
-Bei Feldern mit beschädigter Encoding (kommt bei manchen BRP-PDFs vor) erkennt die App automatisch wo der Text in Binärdaten übergeht und schneidet sauber ab.
 ''',
   ),
 
@@ -288,11 +274,7 @@ Eigenständiges, druckfertiges A4-Dokument mit professionellem Layout:
 - Unterschriftenfelder
 
 ## Original-Formular befüllen
-Befüllt die offiziellen Berliner Formulare:
-- **Informationsbericht v1.01** — Das offizielle Berliner Formular
-- **BRP Ges 100** — Behandlungs- und Rehabilitationsplan
-
-Die Formularfelder werden automatisch mit den Metadaten befüllt. Der Berichtstext wird in die Freitextbereiche eingesetzt.
+Befüllt das offizielle Berliner Informationsbericht-Formular (v1.01) — die Formularfelder werden automatisch mit den Metadaten befüllt, der Berichtstext wird in die Freitextbereiche eingesetzt.
 
 ## Nur Text (TXT)
 Reiner Text zum Kopieren in andere Programme.
@@ -306,45 +288,7 @@ In der PDF-Vorschau können Sie über das Speichern-Symbol die Datei an einem be
   ),
 
   // ============================================================
-  // 7. BRP SEITE 4
-  // ============================================================
-  WikiArticle(
-    id: 'brp-page4',
-    title: 'BRP Seite 4 (Krankengeschichte)',
-    icon: Icons.warning_amber,
-    tags: ['brp', 'seite 4', 'krankengeschichte', 'vertraulich', 'psychiatrisch', 'anamnese'],
-    markdown: '''
-# BRP Seite 4 — Psychiatrische Anamnese
-
-## Warum ist Seite 4 besonders?
-
-Seite 4 des BRP (Ges 100) enthält die **psychiatrische Anamnese und Krankengeschichte**. Diese Daten sind gemäß Berliner Rahmenvertrag Eingliederungshilfe **vertraulich** und dürfen:
-
-- ❌ NICHT an den Kostenträger weitergeleitet werden
-- ❌ NICHT an eine KI-API gesendet werden
-- ❌ NICHT im Informationsbericht auftauchen
-
-## Was macht TeilhabeAssist?
-
-1. **Beim PDF-Import** werden die Formularfelder von Seite 5-11 gelesen. Seite 4 wird übersprungen.
-2. **Vor der Generierung** prüft die App ob der Text Schlüsselwörter enthält die auf Seite-4-Inhalte hinweisen (z.B. "Krankengeschichte", "psychiatrische Anamnese", "Suizidversuch").
-3. **Bei Erkennung** wird eine **Warnung** angezeigt. Sie werden aufgefordert, den Text zu prüfen und ggf. problematische Passagen zu entfernen.
-
-## Erkannte Schlüsselwörter
-
-Die Erkennung reagiert auf Begriffe wie:
-- Krankengeschichte, psychiatrische Anamnese
-- Ersterkrankung, Krankheitsverlauf
-- Stationäre Aufenthalte, psychiatrische Behandlung
-- Familienanamnese, Substanzanamnese
-- Psychopathologischer Befund
-
-**Hinweis:** Die Erkennung ist konservativ — sie warnt lieber einmal zu viel als einmal zu wenig.
-''',
-  ),
-
-  // ============================================================
-  // 8. DATENSCHUTZ
+  // 7. DATENSCHUTZ
   // ============================================================
   WikiArticle(
     id: 'privacy',
@@ -428,7 +372,7 @@ Verwalten Sie die Pseudonymisierungs-Regeln:
 - **Export/Import** — Wörterbuch als JSON sichern oder laden
 
 ## KI-Prompts
-Bearbeiten Sie die System-Prompts für Informationsbericht und BRP. Die Standard-Prompts können jederzeit wiederhergestellt werden.
+Bearbeiten Sie den System-Prompt für den Informationsbericht. Der Standard-Prompt kann jederzeit wiederhergestellt werden.
 
 ## Datenschutz & Recht
 - Datenschutzerklärung lesen und bestätigen
@@ -457,7 +401,6 @@ TeilhabeAssist prüft den generierten Bericht automatisch auf Qualitätsprobleme
 
 ### Vor der Generierung
 - **Pseudonymisierung vollständig?** — Alle erkannten Daten ersetzt?
-- **BRP Seite 4?** — Vertrauliche Inhalte erkannt?
 - **Eingabedaten ausreichend?** — Genug Stichpunkte vorhanden?
 
 ### Nach der Generierung

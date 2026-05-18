@@ -35,26 +35,8 @@ class PdfGenerator {
     return _generate(
       title: 'Informationsbericht',
       hero: ('BERICHTSZEITRAUM', _heroTitle(metadata), _heroSubtitle(metadata)),
-      kpiRow: _kpiRow(metadata, isBrp: false),
+      kpiRow: _kpiRow(metadata),
       sections: _informationsberichtSections(generatedText),
-      structured: structured,
-      metadata: metadata,
-      logoBytes: logoBytes,
-    );
-  }
-
-  /// Generiert einen BRP-Bericht.
-  static Future<Uint8List> generateBrp({
-    required String generatedText,
-    required Map<String, String> metadata,
-    Map<String, dynamic>? structured,
-    Uint8List? logoBytes,
-  }) {
-    return _generate(
-      title: 'BRP — 4. Berliner Fassung',
-      hero: ('BERICHTSZEITRAUM', _heroTitle(metadata), _heroSubtitle(metadata)),
-      kpiRow: _kpiRow(metadata, isBrp: true),
-      sections: _brpSections(generatedText),
       structured: structured,
       metadata: metadata,
       logoBytes: logoBytes,
@@ -154,8 +136,9 @@ class PdfGenerator {
         ));
       }
     } else {
-      // Fallback: Markdown-Sections-Pfad (z.B. BRP oder wenn keine
-      // strukturierte Map vorhanden ist).
+      // Fallback: Markdown-Sections-Pfad — wenn die strukturierte Map
+      // (noch) nicht vorhanden ist, parsen wir den Markdown-Body grob nach
+      // Überschriften.
       for (var i = 0; i < sections.length; i++) {
         final section = sections[i];
         final number = _roman(i + 2);
@@ -636,7 +619,7 @@ class PdfGenerator {
     return parts.join(' · ');
   }
 
-  static List<PdfKpi> _kpiRow(Map<String, String> metadata, {required bool isBrp}) {
+  static List<PdfKpi> _kpiRow(Map<String, String> metadata) {
     final kpis = <PdfKpi>[];
     final leistungstyp = metadata['leistungstyp'] ?? '';
     final fls = metadata['fachleistungsstunden'] ?? '';
@@ -657,7 +640,7 @@ class PdfGenerator {
     }
     kpis.add(PdfKpi(
       label: 'Berichtstyp',
-      value: isBrp ? 'BRP 4.0' : 'IB 1.01',
+      value: 'IB 1.01',
       color: PdfDesignTokens.accent,
     ));
     return kpis;
@@ -731,25 +714,6 @@ class PdfGenerator {
     // Falls Parsing nichts gefunden hat, alles in eine Sektion packen
     if (parsed.where((s) => s.body.trim().isNotEmpty).isEmpty) {
       return [_PdfSection('Bericht', text)];
-    }
-    return parsed;
-  }
-
-  static List<_PdfSection> _brpSections(String text) {
-    final parsed = _parseSections(text, [
-      _SectionPattern(['lebenssituation', 'ressourcen'],
-          'Lebenssituation und Ressourcen'),
-      _SectionPattern(['icf', 'beeinträchtigung', 'teilhabebedarf'],
-          'ICF-orientierte Beschreibung des Teilhabebedarfs'),
-      _SectionPattern(['ziel', 'planung'],
-          'Teilhabeziele und Planung'),
-      _SectionPattern(['maßnahme', 'rehabilitation', 'unterstützung'],
-          'Maßnahmen und Unterstützungsleistungen'),
-      _SectionPattern(['zusammenfassung', 'prognose', 'ausblick'],
-          'Zusammenfassung, Prognose, Ausblick'),
-    ]);
-    if (parsed.where((s) => s.body.trim().isNotEmpty).isEmpty) {
-      return [_PdfSection('Behandlungs- und Rehabilitationsplan', text)];
     }
     return parsed;
   }

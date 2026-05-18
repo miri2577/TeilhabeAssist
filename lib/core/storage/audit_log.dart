@@ -178,9 +178,6 @@ class AuditEvent {
   static AuditEvent dictionaryImported({required int importedCount}) =>
       AuditEvent(action: 'dictionary_imported', details: {'imported': importedCount});
 
-  static AuditEvent brpPage4Blocked() =>
-      const AuditEvent(action: 'brp_page4_blocked');
-
   static AuditEvent pseudonymizationRun({
     required int replacements,
     required int warnings,

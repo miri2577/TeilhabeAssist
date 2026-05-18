@@ -11,7 +11,7 @@ Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist der jeweilige L
 
 2. ZWECK DER DATENVERARBEITUNG
 
-TeilhabeAssist unterstützt Fachkräfte der Eingliederungshilfe bei der Erstellung von Informationsberichten (Berlin, Version 1.01) und Behandlungs- und Rehabilitationsplänen (BRP, 4. Berliner Fassung). Die App nutzt KI-Sprachmodelle (Large Language Models) zur Textgenerierung.
+TeilhabeAssist unterstützt Fachkräfte der Eingliederungshilfe bei der Erstellung von Informationsberichten (Berlin, Version 1.01). Die App nutzt KI-Sprachmodelle (Large Language Models) zur Textgenerierung.
 
 3. VERARBEITETE DATENKATEGORIEN
 
@@ -82,27 +82,22 @@ d) RISIKOBEWERTUNG:
 6.3 API-Keys werden nur lokal gespeichert und niemals an Dritte weitergegeben.
 6.4 Die Löschung aller Daten ist jederzeit durch Deinstallation der App oder über die Einstellungen möglich.
 
-7. BESONDERER SCHUTZ: BRP SEITE 4
+7. AUDIT-LOG
 
-Die psychiatrische Anamnese (Seite 4 des BRP) darf gemäß Berliner Rahmenvertrag nicht an den Kostenträger weitergeleitet werden. Die App erkennt diese Inhalte automatisch und BLOCKIERT ihre Übermittlung an die API – auch nicht in pseudonymisierter Form.
-
-8. AUDIT-LOG
-
-8.1 Die App führt ein lokales Audit-Log, das alle sicherheitsrelevanten Aktionen protokolliert:
+7.1 Die App führt ein lokales Audit-Log, das alle sicherheitsrelevanten Aktionen protokolliert:
 • Berichtsgenerierungen (Modell, Anzahl Pseudonymisierungen, Berichtstyp)
 • Passwort-Events (Setzen, erfolgreiche/fehlgeschlagene Anmeldungen, Sperrungen)
 • Datenschutz-Unterschriften
 • Wörterbuch-Exporte und -Importe
-• BRP Seite 4 Blockierungen
 • Daten-Löschungen
 
-8.2 Das Audit-Log enthält KEINE personenbezogenen Daten – nur Metadaten und Zeitstempel.
+7.2 Das Audit-Log enthält KEINE personenbezogenen Daten – nur Metadaten und Zeitstempel.
 
-8.3 Jeder Eintrag wird über eine SHA-256-Hash-Kette mit dem vorherigen Eintrag verbunden. Manipulation oder Löschung einzelner Einträge ist beim Export auffallend (Chain-Verifikation schlägt fehl) und kann vom Datenschutzbeauftragten geprüft werden.
+7.3 Jeder Eintrag wird über eine SHA-256-Hash-Kette mit dem vorherigen Eintrag verbunden. Manipulation oder Löschung einzelner Einträge ist beim Export auffallend (Chain-Verifikation schlägt fehl) und kann vom Datenschutzbeauftragten geprüft werden.
 
-8.4 Das Audit-Log kann über die Einstellungen als JSON-Datei exportiert werden und dient als Nachweis für den Datenschutzbeauftragten des Trägers.
+7.4 Das Audit-Log kann über die Einstellungen als JSON-Datei exportiert werden und dient als Nachweis für den Datenschutzbeauftragten des Trägers.
 
-9. TECHNISCHE UND ORGANISATORISCHE MASSNAHMEN
+8. TECHNISCHE UND ORGANISATORISCHE MASSNAHMEN
 
 • Verschlüsselung at Rest: AES-256-CBC für Zuordnungstabellen und API-Keys (Hive HiveAesCipher), Schlüsselmaterial im OS-Keystore
 • Verschlüsselung in Transit: TLS 1.3 für API-Kommunikation
@@ -123,11 +118,9 @@ a) Den pseudonymisierten Text VOR JEDER API-Übermittlung sorgfältig zu prüfen
 
 b) Die Pflicht-Bestätigung vor dem API-Aufruf gewissenhaft und wahrheitsgemäß abzugeben.
 
-c) Keine Inhalte aus BRP Seite 4 (psychiatrische Anamnese) in die App einzugeben.
+c) Den API-Key vertraulich zu behandeln und nicht an unbefugte Dritte weiterzugeben.
 
-d) Den API-Key vertraulich zu behandeln und nicht an unbefugte Dritte weiterzugeben.
-
-e) Bei Verdacht auf eine Datenschutzverletzung (z.B. wenn personenbezogene Daten versehentlich an die API übermittelt wurden) unverzüglich die verantwortliche Stelle und den Datenschutzbeauftragten des Trägers zu informieren.
+d) Bei Verdacht auf eine Datenschutzverletzung (z.B. wenn personenbezogene Daten versehentlich an die API übermittelt wurden) unverzüglich die verantwortliche Stelle und den Datenschutzbeauftragten des Trägers zu informieren.
 
 12. RESTRISIKO
 

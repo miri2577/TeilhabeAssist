@@ -7,12 +7,10 @@ class SystemPrompts {
 
   /// Benutzerdefinierte Prompt-Overrides (gesetzt aus SettingsStorage)
   static String? _customInfoPrompt;
-  static String? _customBrpPrompt;
 
   /// Wird beim App-Start aus SettingsStorage geladen.
-  static void loadCustomPrompts({String? infoPrompt, String? brpPrompt}) {
+  static void loadCustomPrompts({String? infoPrompt}) {
     _customInfoPrompt = infoPrompt;
-    _customBrpPrompt = brpPrompt;
   }
 
   /// Liefert den System-Prompt für einen Berichtstyp und ein Output-Schema.
@@ -24,7 +22,6 @@ class SystemPrompts {
     final core = switch (type) {
       ReportType.informationsbericht =>
           _customInfoPrompt ?? _informationsberichtCore,
-      ReportType.brp => _customBrpPrompt ?? _brpCore,
     };
     final schemaSection = _schemaSectionFor(type, schema);
     return '$core\n\n$schemaSection\n\n$_styleRules';
@@ -34,7 +31,6 @@ class SystemPrompts {
   static String getDefaultPrompt(ReportType type) {
     return switch (type) {
       ReportType.informationsbericht => _informationsberichtCore,
-      ReportType.brp => _brpCore,
     };
   }
 
@@ -44,8 +40,6 @@ class SystemPrompts {
         _schemaInfoTib,
       (ReportType.informationsbericht, ReportSchema.kompaktOffiziell) =>
         _schemaInfoOffiziell,
-      (ReportType.brp, ReportSchema.ausfuehrlichTib) => _schemaBrpTib,
-      (ReportType.brp, ReportSchema.kompaktOffiziell) => _schemaBrpOffiziell,
     };
   }
 
@@ -100,8 +94,6 @@ WICHTIGE FACHREGELN:
 - Kontextfaktoren IMMER als Förderfaktor ODER Barriere kennzeichnen.
 - Niemals Diagnosen interpretieren — nur Auswirkungen auf Teilhabe
   beschreiben.
-- Seite 4 des BRP (psychiatrische Anamnese) niemals in den Bericht
-  übernehmen — diese ist vertraulich.
 
 PLATZHALTER-REGELN (ZWINGEND):
 - Verwende AUSSCHLIESSLICH die Platzhalter, die bereits im Eingabetext
@@ -154,32 +146,6 @@ Sichtweise des Leistungserbringers:
 
 Kontextfaktoren:
 "Als Förderfaktor wirkt die vertrauensvolle Beziehung zur Bezugsbetreuung sowie die Anbindung an das wöchentliche Gruppenangebot. Als Barriere zeigt sich die eingeschränkte Belastbarkeit bei Mehrfachanforderungen sowie die Tendenz zur sozialen Isolation in Krisenphasen."
-''';
-
-  static const _brpCore = '''
-SYSTEM-PROMPT: BRP Eingliederungshilfe Berlin v1.1
-
-ROLLE: Du bist ein Fachexperte für die Erstellung von Behandlungs- und Rehabilitationsplänen (BRP, 4. Berliner Fassung) im Bereich der Eingliederungshilfe für seelisch behinderte Menschen und Suchtkranke in Berlin.
-
-AUFGABE: Erstelle bzw. aktualisiere einen BRP auf Basis der bereitgestellten Stichpunkte und Vorbefunde.
-
-INHALTLICHE PFLICHTSEKTIONEN:
-
-1. SOZIODEMOGRAFISCHE BASISDATEN
-2. AKTUELLE LEBENSSITUATION (Wohnen, Finanzen, Soziales, Tagesstruktur)
-3. HILFEBEDARF IN LEBENSBEREICHEN (ICF-orientiert)
-4. HILFEBEDARFSBEMESSUNG (HBG, Leistungstyp, FLS)
-5. ZIELE UND MASSNAHMEN
-
-HINWEIS: Seite 4 (psychiatrische Anamnese) wird NICHT generiert.
-
-BEISPIEL-FORMULIERUNGEN:
-
-Lebenssituation:
-"[PERSON_001] lebt in eigenem bzw. gesichertem Wohnraum. Im zurückliegenden Zeitraum konnten bestehende Fortschritte im Bereich Wohnen und Alltagsbewältigung stabilisiert und kleinschrittig ausgebaut werden."
-
-Hilfebedarf (ICF):
-"Im Lebensbereich Selbstversorgung (d5) zeigt der Klient Ressourcen in der grundlegenden Körperpflege. Einschränkungen bestehen bei der Organisation des Haushalts. Als Förderfaktor wirkt die Bereitschaft, Unterstützungsangebote anzunehmen."
 ''';
 
   // ───────────────────────────────────────────────────────────────────
@@ -243,37 +209,4 @@ Die fachliche Bewertung soll ICF-orientiert formuliert sein, aber als
 Fließtext.
 ''';
 
-  /// BRP — ausführliches Schema (default).
-  static const _schemaBrpTib = '''
-OUTPUT-SCHEMA: AUSFÜHRLICH (TIB/ICF) — BRP
-
-Für jeden relevanten Lebensbereich produziere:
-a) Beschreibung der aktuellen Situation
-b) Vorhandene Ressourcen
-c) Einschränkungen und Beeinträchtigungen
-d) Kontextfaktoren (Förderfaktoren/Barrieren, Umwelt- vs. personenbezogen)
-e) Konkreter Hilfebedarf
-
-Für Ziele/Maßnahmen:
-- Leitziele (personenzentriert)
-- Handlungsziele (SMART)
-- Konkrete Maßnahmen mit Zeithorizont
-''';
-
-  /// BRP — kompaktes Schema, näher am Formular Ges 100.
-  static const _schemaBrpOffiziell = '''
-OUTPUT-SCHEMA: KOMPAKT (Berliner BRP-Formular Ges 100)
-
-Halte die Sektionen so kompakt wie möglich, in der Reihenfolge der
-amtlichen Vorlage:
-A. Allgemeine soziale Situation (Familienstand, Lebensform, Wohnsituation,
-   bedeutende soziale Kontakte, Einkommen)
-B. Hilfebedarfsbeschreibung pro Lebensbereich — jeweils als kurzer Fließ-
-   text mit kurzer Bewertung (kein expliziter a-e-Block)
-C. Zuordnung zur Hilfebedarfsgruppe und Empfehlung Leistungstyp / FLS
-D. Ziele und Maßnahmen — knapp und konkret
-
-Verzichte auf die explizite ICF-Aufgliederung pro Lebensbereich; nutze
-ICF-Sprache implizit im Fließtext.
-''';
 }

@@ -259,19 +259,12 @@ class _PdfExportScreenState extends ConsumerState<PdfExportScreen> {
           // Personalien-Tabelle + Section-Bodies sind im PDF änderbar.
           // Wenn ein Träger-Logo hinterlegt ist, erscheint es im Header.
           final structured = draft.activeStructured;
-          final bytes = draft.type == ReportType.brp
-              ? await PdfGenerator.generateBrp(
-                  generatedText: text,
-                  metadata: metadata,
-                  structured: structured,
-                  logoBytes: logoBytes,
-                )
-              : await PdfGenerator.generateInformationsbericht(
-                  generatedText: text,
-                  metadata: metadata,
-                  structured: structured,
-                  logoBytes: logoBytes,
-                );
+          final bytes = await PdfGenerator.generateInformationsbericht(
+            generatedText: text,
+            metadata: metadata,
+            structured: structured,
+            logoBytes: logoBytes,
+          );
           setState(() => _pdfBytes = bytes);
 
 

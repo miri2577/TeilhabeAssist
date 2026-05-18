@@ -15,7 +15,7 @@ class ReportSchemas {
   /// Tool-Name, der bei Anthropic für Tool-Use verwendet wird.
   static const toolName = 'submit_bericht';
   static const toolDescription =
-      'Liefert den Informationsbericht oder BRP in strukturierter Form. '
+      'Liefert den Informationsbericht in strukturierter Form. '
       'Pflichtfelder müssen vollständig ausgefüllt sein.';
 
   /// Schema-Variante für den User-Output-Wunsch (ausführlich vs. kompakt).
@@ -28,8 +28,6 @@ class ReportSchemas {
         _informationsberichtTib,
       (ReportType.informationsbericht, ReportSchema.kompaktOffiziell) =>
         _informationsberichtKompakt,
-      (ReportType.brp, ReportSchema.ausfuehrlichTib) => _brpTib,
-      (ReportType.brp, ReportSchema.kompaktOffiziell) => _brpKompakt,
     };
   }
 
@@ -299,121 +297,4 @@ class ReportSchemas {
     'additionalProperties': false,
   };
 
-  // ────────────────────────────────────────────────────────────────────
-  //   BRP (Behandlungs- und Rehabilitationsplan)
-  // ────────────────────────────────────────────────────────────────────
-
-  static final Map<String, dynamic> _hilfebedarf = {
-    'type': 'object',
-    'properties': {
-      'lebensbereich': {
-        'type': 'string',
-        'description':
-            'Lebensbereich (z.B. Selbstversorgung d5, Wohnen, Soziale Beziehungen).',
-      },
-      'aktuelle_situation': {'type': 'string'},
-      'ressourcen': {'type': 'string'},
-      'einschraenkungen': {'type': 'string'},
-      'foerderliche_kontextfaktoren': {
-        'type': 'array',
-        'items': _kontextfaktor,
-      },
-      'hinderliche_kontextfaktoren': {
-        'type': 'array',
-        'items': _kontextfaktor,
-      },
-      'konkreter_hilfebedarf': {'type': 'string'},
-    },
-    'required': [
-      'lebensbereich',
-      'aktuelle_situation',
-      'ressourcen',
-      'einschraenkungen',
-      'foerderliche_kontextfaktoren',
-      'hinderliche_kontextfaktoren',
-      'konkreter_hilfebedarf',
-    ],
-    'additionalProperties': false,
-  };
-
-  static final Map<String, dynamic> _brpZielMassnahme = {
-    'type': 'object',
-    'properties': {
-      'leitziel': {'type': 'string'},
-      'handlungsziel_smart': {
-        'type': 'string',
-        'description': 'SMART-formuliertes Handlungsziel.',
-      },
-      'massnahmen': {
-        'type': 'array',
-        'items': {'type': 'string'},
-        'description': 'Konkrete Maßnahmen mit Zeithorizont.',
-      },
-    },
-    'required': ['leitziel', 'handlungsziel_smart', 'massnahmen'],
-    'additionalProperties': false,
-  };
-
-  static final Map<String, dynamic> _brpBase = {
-    'type': 'object',
-    'properties': {
-      'aktuelle_lebenssituation': {
-        'type': 'object',
-        'properties': {
-          'wohnsituation': {'type': 'string'},
-          'finanzielle_situation': {'type': 'string'},
-          'soziale_einbindung': {'type': 'string'},
-          'tagesstruktur': {'type': 'string'},
-        },
-        'required': [
-          'wohnsituation',
-          'finanzielle_situation',
-          'soziale_einbindung',
-          'tagesstruktur',
-        ],
-        'additionalProperties': false,
-      },
-      'hilfebedarf': {
-        'type': 'array',
-        'minItems': 1,
-        'items': _hilfebedarf,
-      },
-      'hilfebedarfsbemessung': {
-        'type': 'object',
-        'properties': {
-          'hilfebedarfsgruppe': {'type': 'string'},
-          'begruendung': {'type': 'string'},
-          'empfohlener_leistungstyp': {'type': 'string'},
-          'empfohlene_fls': {'type': 'string'},
-        },
-        'required': [
-          'hilfebedarfsgruppe',
-          'begruendung',
-          'empfohlener_leistungstyp',
-          'empfohlene_fls',
-        ],
-        'additionalProperties': false,
-      },
-      'ziele_und_massnahmen': {
-        'type': 'array',
-        'minItems': 1,
-        'items': _brpZielMassnahme,
-      },
-      'zusammenfassung': {'type': 'string'},
-    },
-    'required': [
-      'aktuelle_lebenssituation',
-      'hilfebedarf',
-      'hilfebedarfsbemessung',
-      'ziele_und_massnahmen',
-      'zusammenfassung',
-    ],
-    'additionalProperties': false,
-  };
-
-  // BRP-Schemas: Wir nutzen vorerst dieselbe Struktur für TIB und Kompakt
-  // (das Schema selbst ist schon ICF-orientiert; die Kompaktheit kommt
-  // im Markdown-Rendering durch knappere Sätze).
-  static final Map<String, dynamic> _brpTib = _brpBase;
-  static final Map<String, dynamic> _brpKompakt = _brpBase;
 }

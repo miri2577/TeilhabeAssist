@@ -164,9 +164,11 @@ final List<String> kStammdatenRequired = kStammdatenAllFields
     .map((f) => f.key)
     .toList(growable: false);
 
+/// Bericht-Typ. Aktuell wird nur der Berliner Informationsbericht (v1.01)
+/// unterstützt — BRP wurde entfernt, weil das Verfahren so nicht mehr
+/// zulässig ist. Das Enum bleibt für zukünftige Erweiterungen erhalten.
 enum ReportType {
-  informationsbericht('Informationsbericht (Berlin v1.01)'),
-  brp('BRP (4. Berliner Fassung)');
+  informationsbericht('Informationsbericht (Berlin v1.01)');
 
   const ReportType(this.label);
   final String label;
@@ -310,27 +312,16 @@ class ReportDraft {
       structuredReports[selectedSchema];
 
   static List<ReportModule> _defaultModules(ReportType type) {
-    return switch (type) {
-      ReportType.informationsbericht => [
-        ReportModule(type: ModuleType.kopfdaten),
-        ReportModule(type: ModuleType.persondaten),
-        ReportModule(type: ModuleType.allgemeineInfos),
-        ReportModule(type: ModuleType.teilhabeziel, goalNumber: 1),
-        ReportModule(type: ModuleType.flsUebersicht),
-        ReportModule(type: ModuleType.kontextfaktoren),
-        ReportModule(type: ModuleType.zusammenfassung),
-      ],
-      ReportType.brp => [
-        ReportModule(type: ModuleType.kopfdaten),
-        ReportModule(type: ModuleType.persondaten),
-        ReportModule(type: ModuleType.brpLebenssituation),
-        ReportModule(type: ModuleType.brpHilfebedarf),
-        ReportModule(type: ModuleType.brpHilfebedarfsbemessung),
-        ReportModule(type: ModuleType.brpZieleMassnahmen),
-        ReportModule(type: ModuleType.flsUebersicht),
-        ReportModule(type: ModuleType.zusammenfassung),
-      ],
-    };
+    // Aktuell nur Informationsbericht — Switch bleibt für künftige Typen.
+    return [
+      ReportModule(type: ModuleType.kopfdaten),
+      ReportModule(type: ModuleType.persondaten),
+      ReportModule(type: ModuleType.allgemeineInfos),
+      ReportModule(type: ModuleType.teilhabeziel, goalNumber: 1),
+      ReportModule(type: ModuleType.flsUebersicht),
+      ReportModule(type: ModuleType.kontextfaktoren),
+      ReportModule(type: ModuleType.zusammenfassung),
+    ];
   }
 
   /// Alle Stichpunkte als zusammenhängenden Text für die KI.

@@ -5,7 +5,7 @@ import 'icf_domain.dart';
 const _uuid = Uuid();
 
 enum ModuleType {
-  // Gemeinsam (Info-Bericht + BRP)
+  // Module des Informationsberichts (Berlin v1.01).
   kopfdaten('Kopfdaten', Icons.badge_outlined, true),
   persondaten('Persondaten', Icons.person_outline, true),
   allgemeineInfos('Allgemeine Informationen', Icons.info_outline, true),
@@ -13,13 +13,7 @@ enum ModuleType {
   icfDomain('ICF-Lebensbereich', Icons.category_outlined, false),
   flsUebersicht('FLS-Übersicht', Icons.access_time, true),
   kontextfaktoren('Kontextfaktoren', Icons.public, false),
-  zusammenfassung('Zusammenfassung & Empfehlung', Icons.summarize_outlined, true),
-
-  // BRP-spezifisch
-  brpLebenssituation('Aktuelle Lebenssituation', Icons.home_outlined, true),
-  brpHilfebedarf('Hilfebedarf in Lebensbereichen', Icons.accessibility_new, true),
-  brpHilfebedarfsbemessung('Hilfebedarfsbemessung', Icons.calculate_outlined, true),
-  brpZieleMassnahmen('Ziele und Maßnahmen', Icons.track_changes, true);
+  zusammenfassung('Zusammenfassung & Empfehlung', Icons.summarize_outlined, true);
 
   const ModuleType(this.label, this.icon, this.required);
   final String label;

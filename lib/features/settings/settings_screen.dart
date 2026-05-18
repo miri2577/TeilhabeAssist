@@ -375,9 +375,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.edit_note),
-                  title: const Text('System-Prompts bearbeiten'),
+                  title: const Text('System-Prompt bearbeiten'),
                   subtitle: const Text(
-                      'Anweisungen an die KI für Informationsbericht und BRP anpassen'),
+                      'Anweisungen an die KI für den Informationsbericht anpassen'),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () => context.push('/prompts'),
                 ),

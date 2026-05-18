@@ -21,7 +21,6 @@ class ReportMarkdownRenderer {
         _renderInfoTib(data),
       (ReportType.informationsbericht, ReportSchema.kompaktOffiziell) =>
         _renderInfoKompakt(data),
-      (ReportType.brp, _) => _renderBrp(data),
     };
   }
 
@@ -118,93 +117,6 @@ class ReportMarkdownRenderer {
 
     _renderAssistenz(buf, data['assistenzleistungen']);
     _renderZusammenfassung(buf, data['zusammenfassung']);
-    return buf.toString().trim();
-  }
-
-  // ────────────────────────────────────────────────────────────────────
-  //   BRP
-  // ────────────────────────────────────────────────────────────────────
-
-  static String _renderBrp(Map<String, dynamic> data) {
-    final buf = StringBuffer();
-    buf.writeln('# Behandlungs- und Rehabilitationsplan');
-    buf.writeln();
-
-    final ls = data['aktuelle_lebenssituation'] as Map<String, dynamic>?;
-    if (ls != null) {
-      buf.writeln('## 1. Aktuelle Lebenssituation');
-      buf.writeln();
-      _kv(buf, 'Wohnsituation', ls['wohnsituation']);
-      _kv(buf, 'Finanzielle Situation', ls['finanzielle_situation']);
-      _kv(buf, 'Soziale Einbindung', ls['soziale_einbindung']);
-      _kv(buf, 'Tagesstruktur', ls['tagesstruktur']);
-      buf.writeln();
-    }
-
-    final hilfebedarf = (data['hilfebedarf'] as List?) ?? const [];
-    if (hilfebedarf.isNotEmpty) {
-      buf.writeln('## 2. Hilfebedarf');
-      buf.writeln();
-      for (final h in hilfebedarf) {
-        final m = h as Map<String, dynamic>;
-        buf.writeln('### ${m['lebensbereich'] ?? 'Lebensbereich'}');
-        buf.writeln();
-        _kv(buf, 'Aktuelle Situation', m['aktuelle_situation']);
-        _kv(buf, 'Ressourcen', m['ressourcen']);
-        _kv(buf, 'Einschränkungen', m['einschraenkungen']);
-        _renderKontextliste(
-          buf,
-          'Förderliche Kontextfaktoren',
-          m['foerderliche_kontextfaktoren'],
-        );
-        _renderKontextliste(
-          buf,
-          'Hinderliche Kontextfaktoren',
-          m['hinderliche_kontextfaktoren'],
-        );
-        _kv(buf, 'Konkreter Hilfebedarf', m['konkreter_hilfebedarf']);
-        buf.writeln();
-      }
-    }
-
-    final hbb = data['hilfebedarfsbemessung'] as Map<String, dynamic>?;
-    if (hbb != null) {
-      buf.writeln('## 3. Hilfebedarfsbemessung');
-      buf.writeln();
-      _kv(buf, 'Hilfebedarfsgruppe', hbb['hilfebedarfsgruppe']);
-      _kv(buf, 'Begründung', hbb['begruendung']);
-      _kv(buf, 'Empfohlener Leistungstyp', hbb['empfohlener_leistungstyp']);
-      _kv(buf, 'Empfohlene FLS', hbb['empfohlene_fls']);
-      buf.writeln();
-    }
-
-    final ziele = (data['ziele_und_massnahmen'] as List?) ?? const [];
-    if (ziele.isNotEmpty) {
-      buf.writeln('## 4. Ziele und Maßnahmen');
-      buf.writeln();
-      for (var i = 0; i < ziele.length; i++) {
-        final z = ziele[i] as Map<String, dynamic>;
-        buf.writeln('### Ziel ${i + 1}');
-        buf.writeln();
-        _kv(buf, 'Leitziel', z['leitziel']);
-        _kv(buf, 'Handlungsziel (SMART)', z['handlungsziel_smart']);
-        final ms = (z['massnahmen'] as List?) ?? const [];
-        if (ms.isNotEmpty) {
-          buf.writeln('- **Maßnahmen:**');
-          for (final m in ms) {
-            buf.writeln('  - ${m.toString().trim()}');
-          }
-        }
-        buf.writeln();
-      }
-    }
-
-    final zus = (data['zusammenfassung'] ?? '').toString().trim();
-    if (zus.isNotEmpty) {
-      buf.writeln('## 5. Zusammenfassung');
-      buf.writeln();
-      buf.writeln(zus);
-    }
     return buf.toString().trim();
   }
 

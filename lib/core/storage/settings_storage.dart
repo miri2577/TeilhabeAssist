@@ -99,12 +99,6 @@ class SettingsStorage {
           ? _box?.put('custom_info_prompt', value)
           : _box?.delete('custom_info_prompt');
 
-  String? get customBrpPrompt => _box?.get('custom_brp_prompt');
-  set customBrpPrompt(String? value) =>
-      value != null && value.isNotEmpty
-          ? _box?.put('custom_brp_prompt', value)
-          : _box?.delete('custom_brp_prompt');
-
   /// Eigenes Träger-Logo (PNG/JPG/SVG-Bytes) für den PDF-Header.
   /// Gespeichert als Base64-String in der verschlüsselten Hive-Box.
   Uint8List? get customLogo {

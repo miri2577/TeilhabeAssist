@@ -149,56 +149,6 @@ class FormFillerService {
   }
 
   // ──────────────────────────────────────────────────────────────────
-  //   BRP — Ges 100, 4. Berliner Fassung
-  // ──────────────────────────────────────────────────────────────────
-
-  static Future<Uint8List> fillBrp({
-    required String generatedText,
-    required Map<String, String> metadata,
-  }) async {
-    final templateBytes = await _loadTemplate(
-      'assets/templates/mdb-ges_100_11_v12sp.pdf',
-    );
-    final doc = PdfDocument(inputBytes: templateBytes);
-    final fields = _buildFieldMap(doc);
-
-    final name = [metadata['familienname'], metadata['vorname']]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(', ');
-    _setTextByContains(fields, 'Name, Vorname', name.isNotEmpty ? name : null);
-    _setTextByContains(fields, 'Straße', metadata['strasse']);
-    _setTextByContains(fields, 'Postleitzahl', metadata['plz']);
-    _setTextByContains(fields, 'Ort', metadata['ort']);
-    _setTextByContains(fields, 'Telefon', metadata['telefon']);
-    _setTextByContains(fields, 'geboren am', metadata['geburtsdatum']);
-
-    // BRP-Felder weniger einheitlich benannt — wir füllen multiline-Felder
-    // sequentiell mit Sektionen.
-    final sections = _parseSections(generatedText);
-    final mlFields = fields.entries
-        .where((e) =>
-            e.value is PdfTextBoxField &&
-            (e.value as PdfTextBoxField).multiline)
-        .map((e) => e.value as PdfTextBoxField)
-        .toList();
-
-    final orderedSections = <String>[
-      _plain(sections['entwicklung'] ?? sections['allgemeine'] ?? ''),
-      _plain(sections['faehigkeiten'] ?? ''),
-      _plain(sections['ziele_wohnen'] ?? sections['ziele'] ?? ''),
-      _plain(sections['zusammenfassung'] ?? ''),
-    ].where((s) => s.isNotEmpty).toList();
-
-    for (var i = 0; i < orderedSections.length && i < mlFields.length; i++) {
-      mlFields[i].text = orderedSections[i];
-    }
-
-    final bytes = Uint8List.fromList(await doc.save());
-    doc.dispose();
-    return bytes;
-  }
-
-  // ──────────────────────────────────────────────────────────────────
   //   Hilfsfunktionen
   // ──────────────────────────────────────────────────────────────────
 
@@ -329,20 +279,6 @@ class FormFillerService {
     final field = fields[fieldName];
     if (field is PdfTextBoxField) {
       field.text = value;
-    }
-  }
-
-  static void _setTextByContains(
-    Map<String, PdfField> fields,
-    String namePart,
-    String? value,
-  ) {
-    if (value == null || value.trim().isEmpty) return;
-    for (final entry in fields.entries) {
-      if (entry.key.contains(namePart) && entry.value is PdfTextBoxField) {
-        (entry.value as PdfTextBoxField).text = value;
-        return;
-      }
     }
   }
 

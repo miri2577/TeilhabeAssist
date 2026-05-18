@@ -405,12 +405,10 @@ class PdfImportService {
         pageMap[document.pages[p]] = p;
       }
 
-      // PDF-Typ erkennen: BRP (Ges 100) oder Informationsbericht
-      final isBrp = document.pages.count > 15; // BRP hat 22 Seiten, InfoBericht 5
-      // BRP: Nur Seite 5-11 (Index 4-10), Seite 4 = Krankengeschichte überspringen
-      // Informationsbericht: Alle Seiten (Seite 2-5, Index 1-4)
-      final minPage = isBrp ? 4 : 1;
-      final maxPage = isBrp ? 10 : document.pages.count - 1;
+      // Informationsbericht (Berlin v1.01) — wir lesen ab Seite 2 (Index 1).
+      // Seite 1 enthält nur Kopfdaten; die werden separat extrahiert.
+      final minPage = 1;
+      final maxPage = document.pages.count - 1;
 
       final pageFields = <int, List<String>>{};
 

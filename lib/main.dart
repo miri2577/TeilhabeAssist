@@ -43,7 +43,6 @@ void main() async {
   // Benutzerdefinierte Prompts laden
   SystemPrompts.loadCustomPrompts(
     infoPrompt: settingsStorage.customInfoPrompt,
-    brpPrompt: settingsStorage.customBrpPrompt,
   );
 
   runApp(

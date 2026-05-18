@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Willkommen bei TeilhabeAssist',
       description: 'KI-gestützte Berichterstellung für die '
           'Eingliederungshilfe Berlin.\n\n'
-          'Erstelle Informationsberichte und BRP in einem '
+          'Erstelle Informationsberichte (Berlin v1.01) in einem '
           'Bruchteil der bisherigen Zeit.',
     ),
     _OnboardingPage(
@@ -45,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'KI-Generierung',
       description: 'Der pseudonymisierte Text wird an die API gesendet.\n\n'
           'Die KI generiert einen ICF-konformen Bericht nach der Struktur '
-          'des Informationsberichts v1.01 oder BRP.\n\n'
+          'des Informationsberichts v1.01.\n\n'
           'Nach der Generierung werden die Platzhalter automatisch '
           'durch die Originaldaten ersetzt.',
     ),

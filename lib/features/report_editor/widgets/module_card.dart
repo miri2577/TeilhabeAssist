@@ -126,10 +126,6 @@ class ModuleCard extends StatelessWidget {
       ModuleType.flsUebersicht => Colors.blue,
       ModuleType.kontextfaktoren => Colors.green,
       ModuleType.zusammenfassung => Colors.deepOrange,
-      ModuleType.brpLebenssituation => Colors.cyan,
-      ModuleType.brpHilfebedarf => Colors.amber,
-      ModuleType.brpHilfebedarfsbemessung => Colors.deepPurple,
-      ModuleType.brpZieleMassnahmen => Colors.lime,
     };
   }
 
@@ -156,19 +152,6 @@ class ModuleCard extends StatelessWidget {
       ModuleType.zusammenfassung =>
         'Gesamteinschätzung, Empfehlung für nächsten Leistungszeitraum, '
             'FLS-Anpassung...',
-      ModuleType.brpLebenssituation =>
-        'Wohnsituation, finanzielle Situation, soziale Einbindung, '
-            'Tagesstruktur...',
-      ModuleType.brpHilfebedarf =>
-        'Pro ICF-Lebensbereich: Aktuelle Situation, Ressourcen, '
-            'Einschränkungen, Kontextfaktoren, konkreter Hilfebedarf...\n'
-            'ACHTUNG: Keine Inhalte aus Seite 4 (Krankengeschichte) einfügen!',
-      ModuleType.brpHilfebedarfsbemessung =>
-        'Hilfebedarfsgruppe, Begründung der Zuordnung, empfohlener '
-            'Leistungstyp, empfohlene Fachleistungsstunden...',
-      ModuleType.brpZieleMassnahmen =>
-        'Leitziele (personenzentriert, ICF-basiert), Handlungsziele '
-            '(SMART formuliert), konkrete Maßnahmen mit Zeithorizont...',
     };
   }
 }

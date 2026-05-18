@@ -16,7 +16,6 @@ import '../api/schemas/json_reconstruct.dart';
 import '../api/schemas/report_markdown_renderer.dart';
 import '../privacy/privacy_policy_text.dart';
 import '../privacy/privacy_signature_screen.dart';
-import '../pseudonymization/engine/brp_page4_detector.dart';
 import '../pseudonymization/engine/pseudonym_engine.dart';
 import '../pseudonymization/models/pseudonym_result.dart';
 import '../pseudonymization/providers/pseudonym_providers.dart';
@@ -50,7 +49,6 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   bool _isStreaming = false;
   ReportResponse? _usageData;
   String? _error;
-  List<BrpPage4Warning> _page4Warnings = [];
   List<QualityIssue> _qualityIssues = [];
 
   @override
@@ -74,12 +72,6 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   void _runPseudonymization() {
     final draft = ref.read(reportDraftNotifierProvider);
     if (draft == null) return;
-
-    // BRP Seite-4-Warnung (nur Hinweis, kein Auto-Removal)
-    if (draft.type == ReportType.brp) {
-      final allText = '${draft.allNotesAsText}\n${draft.previousReport}';
-      _page4Warnings = BrpPage4Detector.detect(allText);
-    }
 
     // EINE Engine für alle Texte → eindeutige Platzhalter-Nummern
     _engine = PseudonymEngine();
@@ -210,8 +202,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
   bool get _canGenerate {
     if (!_confirmed) return false;
     if (!_canConfirmYet) return false;
-    final hasWarnings = (_pseudonymResult?.warnings.isNotEmpty ?? false) ||
-        _page4Warnings.isNotEmpty;
+    final hasWarnings = _pseudonymResult?.warnings.isNotEmpty ?? false;
     if (hasWarnings && !_acknowledgedWarnings) return false;
     return true;
   }
@@ -486,59 +477,6 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         ),
         const SizedBox(height: 16),
 
-        // BRP Seite-4-Warnung
-        if (_page4Warnings.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.1),
-              border: Border.all(color: Colors.orange, width: 1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.warning_amber,
-                        color: Colors.orange.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Mögliche BRP Seite 4 Inhalte erkannt',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Die psychiatrische Anamnese (Seite 4 des BRP) darf nicht '
-                  'an die API übermittelt werden. Bitte prüfe den Text unten '
-                  'sorgfältig und stelle sicher, dass keine Seite-4-Inhalte '
-                  'enthalten sind. Gehe ggf. zurück zum Editor und entferne '
-                  'diese Passagen aus dem Vorbericht.',
-                  style: theme.textTheme.bodySmall,
-                ),
-                const SizedBox(height: 4),
-                ..._page4Warnings.map(
-                  (w) => Padding(
-                    padding: const EdgeInsets.only(left: 4, top: 2),
-                    child: Text('• ${w.message}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.orange.shade800,
-                        )),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
         // Pseudonymisierungs-Warnings
         if (_pseudonymResult!.warnings.isNotEmpty) ...[
           ConstrainedBox(
@@ -638,8 +576,7 @@ class _GenerateScreenState extends ConsumerState<GenerateScreen> {
         ),
 
         // Zweite Bestätigung — nur bei vorhandenen Warnungen
-        if ((_pseudonymResult?.warnings.isNotEmpty ?? false) ||
-            _page4Warnings.isNotEmpty) ...[
+        if (_pseudonymResult?.warnings.isNotEmpty ?? false) ...[
           const SizedBox(height: 8),
           CheckboxListTile(
             value: _acknowledgedWarnings,
