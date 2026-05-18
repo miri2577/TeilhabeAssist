@@ -400,10 +400,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const Divider(height: 1),
                     ListTile(
+                      leading: const Icon(Icons.fact_check_outlined),
+                      title: const Text('Audit-Log ansehen'),
+                      subtitle: const Text(
+                          'Alle protokollierten Aktionen mit Filter & '
+                          'Kettenprüfung'),
+                      trailing:
+                          const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () => context.push('/audit-log'),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
                       leading: const Icon(Icons.receipt_long_outlined),
                       title: const Text('Audit-Log exportieren'),
                       subtitle: const Text(
-                          'Protokoll aller sicherheitsrelevanten Aktionen'),
+                          'JSON-Export für DSB / Aufsichtsbehörde'),
                       onTap: _exportAuditLog,
                     ),
                   ],
