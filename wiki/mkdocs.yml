@@ -1,0 +1,78 @@
+site_name: FEGH-Bericht Wiki
+site_description: KI-gestützte Berichterstellung für die Eingliederungshilfe Berlin — Teil der FEGH-Suite
+site_url: https://miri2577.github.io/TeilhabeAssist/
+repo_url: https://github.com/miri2577/TeilhabeAssist
+repo_name: miri2577/TeilhabeAssist
+
+theme:
+  name: material
+  language: de
+  palette:
+    - scheme: default
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-7
+        name: Dunkelmodus
+    - scheme: slate
+      primary: red
+      accent: red
+      toggle:
+        icon: material/brightness-4
+        name: Hellmodus
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang: de
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Start: index.md
+  - Anleitung:
+    - Quickstart: anleitung/quickstart.md
+    - Benutzerhandbuch: anleitung/benutzerhandbuch.md
+    - Berichterstellungs-Flow: anleitung/berichterstellung.md
+    - PDF-Export: anleitung/pdf-export.md
+    - Troubleshooting: anleitung/troubleshooting.md
+  - Datenschutz & Sicherheit:
+    - Datenschutzmodell: datenschutz/datenschutz.md
+    - Pseudonymisierung: datenschutz/pseudonymisierung.md
+    - Sicherheitsmodell: datenschutz/sicherheitsmodell.md
+    - Audit-Log: datenschutz/audit-log.md
+    - Audit-Log Signatur (Träger-Schlüssel): datenschutz/audit-log-signing.md
+  - Technik:
+    - Architektur: technik/architektur.md
+    - Datenspeicherung: technik/datenspeicherung.md
+    - LLM-Provider: technik/llm-provider.md
+    - Region-Konfiguration: technik/region-konfiguration.md
+    - Migration und Versionen: technik/migration.md
+    - Testing: technik/testing.md
+    - Entwicklungs-Setup: technik/entwicklungs-setup.md
+  - FEGH-Suite:
+    - FEGH-Verwaltung: https://miri2577.github.io/FEGH-Verwaltung/
+    - FEGH-Dokumentation: https://miri2577.github.io/FEGH-Dokumentation/
