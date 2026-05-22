@@ -47,7 +47,7 @@ class PdfKpi {
 /// angezeigt — damit hat jeder Träger sein eigenes Logo im PDF.
 pw.Widget buildHeader({
   required String title,
-  String appName = 'TeilhabeAssist',
+  String appName = 'FEGH-Bericht',
   String appTagline = 'Eingliederungshilfe nach SGB IX',
   String? aktenzeichen,
   pw.ImageProvider? logo,
@@ -126,7 +126,7 @@ pw.Widget buildHeader({
   );
 }
 
-pw.Widget buildFooter(pw.Context ctx, {String appName = 'TeilhabeAssist'}) {
+pw.Widget buildFooter(pw.Context ctx, {String appName = 'FEGH-Bericht'}) {
   return pw.Container(
     padding: const pw.EdgeInsets.only(top: 10),
     decoration: const pw.BoxDecoration(

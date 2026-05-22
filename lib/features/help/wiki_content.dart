@@ -25,13 +25,13 @@ const wikiArticles = <WikiArticle>[
   // ============================================================
   WikiArticle(
     id: 'overview',
-    title: 'Was ist TeilhabeAssist?',
+    title: 'Was ist FEGH-Bericht?',
     icon: Icons.info_outline,
     tags: ['übersicht', 'einführung', 'start', 'was'],
     markdown: '''
-# Was ist TeilhabeAssist?
+# Was ist FEGH-Bericht?
 
-TeilhabeAssist ist eine KI-gestützte Desktop-Anwendung für Fachkräfte der **Eingliederungshilfe in Berlin**. Die App unterstützt bei der Erstellung von:
+FEGH-Bericht ist eine KI-gestützte Desktop-Anwendung für Fachkräfte der **Eingliederungshilfe in Berlin**. Die App unterstützt bei der Erstellung von:
 
 - **Informationsberichten** (Berliner Vorlage, Version 1.01)
 
@@ -67,7 +67,7 @@ Fachkräfte berichten von einer Reduktion der Berichtszeit von **2-3,5 Stunden a
     markdown: '''
 # Pseudonymisierung
 
-Die Pseudonymisierung ist das Herzstück von TeilhabeAssist. Sie stellt sicher, dass keine personenbezogenen Daten an die KI-API übermittelt werden.
+Die Pseudonymisierung ist das Herzstück von FEGH-Bericht. Sie stellt sicher, dass keine personenbezogenen Daten an die KI-API übermittelt werden.
 
 ## Wie funktioniert es?
 
@@ -119,7 +119,7 @@ Im Pseudonymisierungs-Test (Hauptmenü → Pseudonymisierung testen) sehen Sie f
     markdown: '''
 # PDF-Import
 
-TeilhabeAssist kann PDF-Dateien direkt importieren und die relevanten Inhalte extrahieren.
+FEGH-Bericht kann PDF-Dateien direkt importieren und die relevanten Inhalte extrahieren.
 
 ## Unterstützte Formate
 
@@ -210,7 +210,7 @@ Nach Klick auf "Generieren" durchläuft der Text folgende Schritte:
 
 ## Wie die KI arbeitet
 
-TeilhabeAssist sendet einen **System-Prompt** (Anweisungen an die KI) zusammen mit dem pseudonymisierten Text an die API. Der System-Prompt definiert:
+FEGH-Bericht sendet einen **System-Prompt** (Anweisungen an die KI) zusammen mit dem pseudonymisierten Text an die API. Der System-Prompt definiert:
 
 - **Rolle** — Fachexperte für Eingliederungshilfe Berlin
 - **Struktur** — Zwingend einzuhaltende Berichtsstruktur
@@ -379,7 +379,7 @@ Bearbeiten Sie den System-Prompt für den Informationsbericht. Der Standard-Prom
 - Audit-Log exportieren
 
 ## Info & Daten
-- Über TeilhabeAssist
+- Über FEGH-Bericht
 - **Alle Daten löschen** — Setzt die gesamte App zurück (API-Keys, Wörterbücher, Einstellungen)
 ''',
   ),
@@ -395,7 +395,7 @@ Bearbeiten Sie den System-Prompt für den Informationsbericht. Der Standard-Prom
     markdown: '''
 # Qualitätsprüfung
 
-TeilhabeAssist prüft den generierten Bericht automatisch auf Qualitätsprobleme.
+FEGH-Bericht prüft den generierten Bericht automatisch auf Qualitätsprobleme.
 
 ## Automatische Prüfungen
 

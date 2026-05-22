@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    FEGH-Bericht — App-Icon
+
+    Stil-Anlehnung an FEGH-Verwaltung: lila Diagonal-Verlauf,
+    weiße flache Silhouetten, abgerundete Ecken. Statt der
+    Personen-Hierarchie zeigt dieses Icon ein Dokument mit
+    KI-Sparkles (Berichterstellung mit KI-Assistenz).
+  -->
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b3a8c"/>
+      <stop offset="1" stop-color="#8a6bbf"/>
+    </linearGradient>
+
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f3eef9"/>
+    </linearGradient>
+
+    <linearGradient id="sparkle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e7d8ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hintergrund mit abgerundeten Ecken -->
+  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="url(#bg)"/>
+
+  <!-- Subtiler Highlight oben links -->
+  <ellipse cx="280" cy="220" rx="380" ry="180" fill="#ffffff" opacity="0.08"/>
+
+  <!-- Dokument-Silhouette (mit umgeklappter Ecke) -->
+  <g transform="translate(216 312)">
+    <path d="
+      M 0 36
+      Q 0 0 36 0
+      L 396 0
+      L 530 134
+      L 530 600
+      Q 530 636 494 636
+      L 36 636
+      Q 0 636 0 600
+      Z
+    " fill="url(#paper)"/>
+
+    <!-- Umgeklappte Ecke -->
+    <path d="M 396 0 L 530 134 L 412 134 Q 396 134 396 118 Z"
+          fill="#d9c9ef"/>
+
+    <!-- Text-Linien -->
+    <g fill="#7a5bb0" opacity="0.85">
+      <rect x="64" y="190" width="402" height="22" rx="11"/>
+      <rect x="64" y="248" width="368" height="22" rx="11"/>
+      <rect x="64" y="306" width="402" height="22" rx="11"/>
+      <rect x="64" y="364" width="320" height="22" rx="11"/>
+      <rect x="64" y="422" width="402" height="22" rx="11"/>
+      <rect x="64" y="480" width="280" height="22" rx="11"/>
+    </g>
+  </g>
+
+  <!-- KI-Sparkles oben rechts -->
+  <g fill="url(#sparkle)">
+    <!-- Großer Sparkle (4-Punkt-Stern) -->
+    <path d="
+      M 760 196
+      L 776 252
+      L 832 268
+      L 776 284
+      L 760 340
+      L 744 284
+      L 688 268
+      L 744 252
+      Z
+    "/>
+    <!-- Mittlerer Sparkle -->
+    <path d="
+      M 870 320
+      L 880 350
+      L 910 360
+      L 880 370
+      L 870 400
+      L 860 370
+      L 830 360
+      L 860 350
+      Z
+    "/>
+    <!-- Kleiner Sparkle -->
+    <path d="
+      M 700 380
+      L 707 400
+      L 727 407
+      L 707 414
+      L 700 434
+      L 693 414
+      L 673 407
+      L 693 400
+      Z
+    "/>
+  </g>
+</svg>

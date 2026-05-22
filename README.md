@@ -1,12 +1,14 @@
-# TeilhabeAssist
+# FEGH-Bericht
 
-KI-gestützte Berichterstellung für die Eingliederungshilfe (Berlin).
+KI-gestützte Berichterstellung für die Eingliederungshilfe (Berlin) — Teil
+der **FEGH-Suite** (gemeinsam mit
+[FEGH-Verwaltung](https://github.com/miri2577/FEGH-Verwaltung) und
+[FEGH-Dokumentation](https://github.com/miri2577/FEGH-Dokumentation)).
 
-TeilhabeAssist unterstützt Fachkräfte bei der Erstellung von
-**Informationsberichten** und **Behandlungs- und Rehabilitationsplänen (BRP,
-4. Berliner Fassung)**. Stichpunkte und Vorberichte werden lokal
-pseudonymisiert, an ein LLM gesendet und nach Rückkehr re-identifiziert —
-**die Zuordnungstabelle verlässt nie das Gerät**.
+FEGH-Bericht unterstützt Fachkräfte bei der Erstellung von Berliner
+**Informationsberichten** (Vorlage 1.01). Stichpunkte und Vorberichte
+werden lokal pseudonymisiert, an ein LLM gesendet und nach Rückkehr
+re-identifiziert — **die Zuordnungstabelle verlässt nie das Gerät**.
 
 ## Sicherheits- und Datenschutzmodell
 

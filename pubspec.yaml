@@ -1,5 +1,5 @@
 name: teilhabe_assist
-description: "KI-gestützte Berichterstellung für Eingliederungshilfe Berlin"
+description: "FEGH-Bericht — KI-gestützte Berichterstellung für Eingliederungshilfe Berlin (Teil der FEGH-Suite)"
 publish_to: 'none'
 version: 0.2.0+2
 

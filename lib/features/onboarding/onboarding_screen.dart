@@ -16,7 +16,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _pages = [
     _OnboardingPage(
       icon: Icons.description_outlined,
-      title: 'Willkommen bei TeilhabeAssist',
+      title: 'Willkommen bei FEGH-Bericht',
       description: 'KI-gestützte Berichterstellung für die '
           'Eingliederungshilfe Berlin.\n\n'
           'Erstelle Informationsberichte (Berlin v1.01) in einem '

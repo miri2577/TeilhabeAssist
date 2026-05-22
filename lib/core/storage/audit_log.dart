@@ -91,7 +91,7 @@ class AuditLog {
   /// Log als JSON exportieren (für Datenschutzbeauftragte).
   String exportToJson() {
     return jsonEncode({
-      'appName': 'TeilhabeAssist',
+      'appName': 'FEGH-Bericht',
       'appVersion': AuditContext.appVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'chainValid': verifyChain() == null,
@@ -122,7 +122,7 @@ class AuditLog {
       throw StateError('Kein Audit-Schlüssel konfiguriert.');
     }
     final payload = <String, dynamic>{
-      'appName': 'TeilhabeAssist',
+      'appName': 'FEGH-Bericht',
       'appVersion': AuditContext.appVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'chainValid': verifyChain() == null,

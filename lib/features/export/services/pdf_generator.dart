@@ -20,7 +20,7 @@ const _germanMonths = [
 class PdfGenerator {
   PdfGenerator._();
 
-  static const String _appName = 'TeilhabeAssist';
+  static const String _appName = 'FEGH-Bericht';
   static const String _appTagline = 'Eingliederungshilfe nach SGB IX';
 
   /// Generiert einen Informationsbericht.

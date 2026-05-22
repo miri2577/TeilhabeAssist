@@ -1,6 +1,6 @@
 const kPrivacyPolicyText = '''
 DATENSCHUTZERKLÄRUNG UND NUTZUNGSVEREINBARUNG
-TeilhabeAssist – KI-gestützte Berichterstellung
+FEGH-Bericht – KI-gestützte Berichterstellung
 Version 1.1 | Stand: Mai 2026
 
 ═══════════════════════════════════════════════════
@@ -11,7 +11,7 @@ Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist der jeweilige L
 
 2. ZWECK DER DATENVERARBEITUNG
 
-TeilhabeAssist unterstützt Fachkräfte der Eingliederungshilfe bei der Erstellung von Informationsberichten (Berlin, Version 1.01). Die App nutzt KI-Sprachmodelle (Large Language Models) zur Textgenerierung.
+FEGH-Bericht unterstützt Fachkräfte der Eingliederungshilfe bei der Erstellung von Informationsberichten (Berlin, Version 1.01). Die App nutzt KI-Sprachmodelle (Large Language Models) zur Textgenerierung.
 
 3. VERARBEITETE DATENKATEGORIEN
 

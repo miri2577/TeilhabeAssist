@@ -734,7 +734,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showAbout(BuildContext context, ThemeData theme) {
     showAboutDialog(
       context: context,
-      applicationName: 'TeilhabeAssist',
+      applicationName: 'FEGH-Bericht',
       applicationVersion: '0.2.0-beta',
       applicationIcon: Icon(
         Icons.description_outlined,

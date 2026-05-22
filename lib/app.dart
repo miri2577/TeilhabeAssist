@@ -56,7 +56,7 @@ class TeilhabeAssistApp extends ConsumerWidget {
             textScaler: TextScaler.linear(settings.textScaleFactor),
           ),
           child: MaterialApp.router(
-            title: 'TeilhabeAssist',
+            title: 'FEGH-Bericht',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
@@ -78,7 +78,7 @@ class TeilhabeAssistApp extends ConsumerWidget {
         textScaler: TextScaler.linear(settings.textScaleFactor),
       ),
       child: MaterialApp(
-        title: 'TeilhabeAssist',
+        title: 'FEGH-Bericht',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,

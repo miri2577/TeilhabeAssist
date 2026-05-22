@@ -88,7 +88,7 @@ class _HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TeilhabeAssist'),
+        title: const Text('FEGH-Bericht'),
         actions: [
           IconButton(
             icon: const Icon(Icons.help_outline),
@@ -123,7 +123,7 @@ class _HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'TeilhabeAssist',
+                  'FEGH-Bericht',
                   style: theme.textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 8),

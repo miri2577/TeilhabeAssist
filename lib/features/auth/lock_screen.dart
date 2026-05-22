@@ -93,7 +93,7 @@ class _LockScreenState extends State<LockScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'TeilhabeAssist',
+                  'FEGH-Bericht',
                   style: theme.textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 8),
