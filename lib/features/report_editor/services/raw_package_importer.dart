@@ -79,7 +79,10 @@ class RawPackageImporter {
     for (final z in ziele.whereType<Map<String, dynamic>>()) {
       final zeile = _zielZeile(z);
       final rz = _s(z['richtungsziel']);
-      if (_s(z['art']).startsWith('Richtungsziel')) {
+      // Webapp-Terminologie: "Leitziel" (Berliner ZLP-Formular); ältere Exporte
+      // sendeten "Richtungsziel" — beide akzeptieren.
+      final art = _s(z['art']);
+      if (art.startsWith('Leitziel') || art.startsWith('Richtungsziel')) {
         richtungsziele.putIfAbsent(_s(z['titel']), StringBuffer.new)
           ..writeln('Richtungsziel: ${_s(z['titel'])}'
               '${_s(z['status']).isNotEmpty ? ' [${_s(z['status'])}]' : ''}');
