@@ -13,6 +13,7 @@ import 'models/report_module.dart';
 import 'providers/report_providers.dart';
 import 'services/pdf_import_service.dart';
 import 'services/quality_checker.dart';
+import 'services/raw_package_importer.dart';
 import 'services/template_storage.dart';
 import 'widgets/module_card.dart';
 import 'widgets/module_palette.dart';
@@ -112,6 +113,45 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
         }
       }
     }
+  }
+
+  /// Rohpaket-Import aus der FEGH-Leistungsnachweis-Webapp (JSON-Download am
+  /// Bericht): Stammdaten + ZLP-Ziele + Verlaufsdoku des Zeitraums. Die Texte
+  /// laufen vor der Übernahme durch dieselbe Pseudonym-Vorschau wie PDF-Importe.
+  Future<void> _importRohpaket() async {
+    RawPackageResult? paket;
+    try {
+      paket = await RawPackageImporter.pickAndParse();
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
+    if (paket == null || !mounted) return;
+
+    final accepted = await _showImportPseudonymPreview(
+      sourceLabel: 'FEGH-Rohpaket ${paket.fileName}',
+      text: paket.notes,
+    );
+    if (!accepted || !mounted) return;
+
+    ref.read(reportDraftNotifierProvider.notifier).applyRawImport(
+          stammdaten: paket.stammdaten,
+          notes: paket.notes,
+          goalModules: paket.goalModules,
+        );
+    _notesController.text =
+        ref.read(reportDraftNotifierProvider)?.currentNotes ?? paket.notes;
+    setState(() => _mode = EditorMode.erstbericht);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Rohpaket importiert: ${paket.stammdaten.length} '
+            'Stammdaten, ${paket.zielAnzahl} Ziele, '
+            '${paket.dokuAnzahl} Doku-Einträge'),
+      ),
+    );
   }
 
   Future<void> _importPdf() async {
@@ -463,6 +503,12 @@ class _ReportEditorScreenState extends ConsumerState<ReportEditorScreen> {
                   onPressed: _loadTemplate,
                   icon: const Icon(Icons.folder_open),
                   label: const Text('Aus Vorlage erstellen'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _importRohpaket,
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  label: const Text('Rohpaket aus FEGH-Leistungsnachweis (JSON)'),
                 ),
               ],
               ),

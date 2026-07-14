@@ -165,6 +165,36 @@ class ReportDraftNotifier extends StateNotifier<ReportDraft?> {
     return applied;
   }
 
+  /// Übernimmt ein importiertes Rohpaket aus der FEGH-Leistungsnachweis-Webapp:
+  /// legt bei Bedarf einen neuen Erstbericht an, mergt die Stammdaten (ohne
+  /// bestehende Werte zu überschreiben), hängt die Verlaufsdoku an die Notizen
+  /// und ergänzt Teilhabeziel-Module (nur, wenn noch keine mit Text existieren).
+  void applyRawImport({
+    required Map<String, String> stammdaten,
+    required String notes,
+    required List<ReportModule> goalModules,
+  }) {
+    state ??= ReportDraft(type: ReportType.informationsbericht);
+    mergeStammdaten(stammdaten);
+    final vorhandene = state!.currentNotes.trim();
+    state = state!.copyWith(
+      currentNotes: vorhandene.isEmpty ? notes : '$vorhandene\n\n$notes',
+    );
+    final hatZielTexte = state!.modules.any(
+        (m) => m.type == ModuleType.teilhabeziel && m.notes.trim().isNotEmpty);
+    if (goalModules.isNotEmpty && !hatZielTexte) {
+      final ohneLeereZiele = state!.modules
+          .where((m) => m.type != ModuleType.teilhabeziel)
+          .toList();
+      // Ziele vor der Zusammenfassung einsortieren (falls vorhanden)
+      final zusIndex = ohneLeereZiele
+          .indexWhere((m) => m.type == ModuleType.zusammenfassung);
+      final einfuegeIndex = zusIndex < 0 ? ohneLeereZiele.length : zusIndex;
+      ohneLeereZiele.insertAll(einfuegeIndex, goalModules);
+      state = state!.copyWith(modules: ohneLeereZiele);
+    }
+  }
+
   void selectSchema(ReportSchema schema) {
     if (state == null) return;
     state = state!.copyWith(

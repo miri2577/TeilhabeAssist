@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const _seedColor = Color(0xFF1565C0);
+  /// FEGH-Suite-Markenfarbe (Petrol) — identisch zur Webapp
+  /// FEGH-Leistungsnachweis (`--brand: #0e7490`), einheitliche Optik der Suite.
+  static const _seedColor = Color(0xFF0E7490);
 
   static ThemeData get light => ThemeData(
         useMaterial3: true,
