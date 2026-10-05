@@ -1,0 +1,40 @@
+name: macOS-Build
+
+# Baut die Mac-App und legt sie als ZIP ab. Als ZIP, weil ein
+# hochgeladener .app-Ordner Verknüpfungen und Ausführungsrechte verliert.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [macos-build]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter build macos --release
+
+      - name: Verpacken
+        working-directory: build/macos/Build/Products/Release
+        run: |
+          APP=$(ls -d *.app | head -n1)
+          codesign --verify --deep "$APP"
+          lipo -archs "$APP/Contents/MacOS/"*
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist"
+          ditto -c -k --keepParent "$APP" "$GITHUB_WORKSPACE/FEGH-Bericht-macos.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FEGH-Bericht-macos
+          path: FEGH-Bericht-macos.zip
+          retention-days: 14
