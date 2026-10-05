@@ -1,7 +1,8 @@
 name: macOS-Build
 
-# Baut die Mac-App und legt sie als ZIP ab. Als ZIP, weil ein
-# hochgeladener .app-Ordner Verknüpfungen und Ausführungsrechte verliert.
+# Baut die Mac-App, signiert sie mit dem Apple-Development-Zertifikat
+# (siehe macos/fastlane/Fastfile) und legt sie als ZIP ab. Als ZIP, weil
+# ein hochgeladener .app-Ordner Verknüpfungen und Ausführungsrechte verliert.
 
 on:
   workflow_dispatch:
@@ -24,13 +25,54 @@ jobs:
 
       - run: flutter build macos --release
 
-      - name: Verpacken
-        working-directory: build/macos/Build/Products/Release
+      - name: SSH-Zugang zum Zertifikate-Repo
+        env:
+          MATCH_DEPLOY_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
         run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$MATCH_DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts
+
+      - name: Zertifikat und Profil
+        working-directory: macos
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ vars.MATCH_GIT_URL }}
+        run: fastlane mac signing
+
+      - name: Signieren und verpacken
+        run: |
+          set -euo pipefail
+          cd build/macos/Build/Products/Release
           APP=$(ls -d *.app | head -n1)
-          codesign --verify --deep "$APP"
-          lipo -archs "$APP/Contents/MacOS/"*
-          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist"
+          PROFILE=$(cat "$RUNNER_TEMP/profile_path")
+          security cms -D -i "$PROFILE" > "$RUNNER_TEMP/profile.plist"
+          TEAM=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$RUNNER_TEMP/profile.plist")
+          BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist")
+
+          # Entitlements der App plus die, die das Profil für den
+          # Schlüsselbund verlangt
+          ENT="$RUNNER_TEMP/app.entitlements"
+          cp "$GITHUB_WORKSPACE/macos/Runner/Release.entitlements" "$ENT"
+          /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM.$BUNDLE" "$ENT"
+          /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM" "$ENT"
+          /usr/libexec/PlistBuddy -c "Add :keychain-access-groups array" "$ENT"
+          /usr/libexec/PlistBuddy -c "Add :keychain-access-groups:0 string $TEAM.$BUNDLE" "$ENT"
+
+          cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+          IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -n1 | awk '{print $2}')
+          test -n "$IDENTITY"
+
+          # Von innen nach außen: erst Frameworks, dann die App
+          find "$APP/Contents/Frameworks" -depth \( -name "*.framework" -o -name "*.dylib" \) \
+            -exec codesign --force --sign "$IDENTITY" --timestamp=none {} \;
+          codesign --force --sign "$IDENTITY" --timestamp=none --entitlements "$ENT" "$APP"
+          codesign --verify --deep --strict "$APP"
+          codesign -dv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier" | head -n3
           ditto -c -k --keepParent "$APP" "$GITHUB_WORKSPACE/FEGH-Bericht-macos.zip"
 
       - uses: actions/upload-artifact@v4

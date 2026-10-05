@@ -1,0 +1,62 @@
+# Signatur der Mac-App auf GitHub Actions mit einem Apple-Development-
+# Zertifikat. Zertifikat und Profil verwaltet fastlane match im privaten
+# Repo ios-certificates; der Zugriff auf Apple läuft über einen
+# App-Store-Connect-API-Schlüssel.
+#
+# Warum überhaupt: Der Datenschutz-Schlüsselbund von macOS verweigert einer
+# nur ad hoc signierten App den Zugriff (Fehler -34018).
+default_platform(:mac)
+
+APP_ID = "de.miri2577.feghBericht"
+
+# Entwicklungsprofile gelten nur auf eingetragenen Geräten.
+DEVICES = {
+  "MacBook Air Mirko" => "A07B2738-31C4-54BC-87D9-0E33C9912D1D",
+}
+
+def asc_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_content: ENV.fetch("ASC_KEY_P8"),
+    is_key_content_base64: true,
+    in_house: false,
+  )
+end
+
+# Bundle-ID im Developer-Portal anlegen, falls sie noch fehlt.
+def ensure_bundle_id(key)
+  Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(hash: key)
+  existing = Spaceship::ConnectAPI::BundleId.all(filter: { identifier: APP_ID })
+  if existing.any? { |b| b.identifier == APP_ID }
+    UI.message("Bundle-ID #{APP_ID} existiert bereits")
+  else
+    Spaceship::ConnectAPI::BundleId.create(name: "FEGH-Bericht", platform: "MAC_OS", identifier: APP_ID)
+    UI.success("Bundle-ID #{APP_ID} angelegt")
+  end
+end
+
+platform :mac do
+  desc "Zertifikat und Profil holen (bei Bedarf anlegen), Profilpfad ablegen"
+  lane :signing do
+    setup_ci
+    key = asc_key
+    ensure_bundle_id(key)
+    DEVICES.each do |name, udid|
+      register_device(name: name, udid: udid, platform: "mac", api_key: key)
+    end
+    match(
+      type: "development",
+      platform: "macos",
+      app_identifier: APP_ID,
+      api_key: key,
+      git_url: ENV.fetch("MATCH_GIT_URL"),
+      git_branch: "master",
+      readonly: false,
+      force_for_new_devices: true,
+    )
+    path = ENV.select { |k, _| k.start_with?("sigh_#{APP_ID}") && k.end_with?("profile-path") }.values.first
+    UI.user_error!("Kein Profilpfad von match erhalten") if path.to_s.empty?
+    File.write(File.join(ENV.fetch("RUNNER_TEMP"), "profile_path"), path)
+  end
+end
